@@ -34,12 +34,12 @@ def build(role, title, uid, port, intro, labels):
         util_gauge(f"{PN} out (this side receives)", f'cbs_port_tx_util_percent{{port="{P}"}}', pos(4, 5, 4, 6), "Traffic from the switch to this side's host."),
         timeseries(f"{PN} utilisation over time (%)", "Dashed: IEC 61162-460 80 % design limit and 90 % load alert.",
                    [target(f'cbs_port_rx_util_percent{{port="{P}"}}', "in", "A"), target(f'cbs_port_tx_util_percent{{port="{P}"}}', "out", "B")],
-                   pos(8, 5, 8, 6), unit="percent", ymax=110, thresholds=[(80, YELLOW), (90, RED)],
+                   pos(8, 5, 16, 6), unit="percent", ymax=110, thresholds=[(80, YELLOW), (90, RED)],
                    overrides=[color_override("in", BLUE), color_override("out", ORANGE)]),
         timeseries(f"{PN} throughput: Mbit/s (MB/s in the legend)", "Wire rate seen by the switch on this side's port. 8 Mbit/s = 1 MB/s.",
                    [target(f'cbs_port_rx_bps{{port="{P}"}} / 1e6', "in (Mbit/s)", "A"), target(f'cbs_port_tx_bps{{port="{P}"}} / 1e6', "out (Mbit/s)", "B"),
                     target(f'cbs_port_rx_bps{{port="{P}"}} / 8e6', "in (MB/s)", "C"), target(f'cbs_port_tx_bps{{port="{P}"}} / 8e6', "out (MB/s)", "D")],
-                   pos(16, 5, 8, 6), unit="Mbits", overrides=[color_override("in.*", BLUE), color_override("out.*", ORANGE)], mbs_legend=True),
+                   pos(0, 11, 24, 7), unit="Mbits", overrides=[color_override("in.*", BLUE), color_override("out.*", ORANGE)], mbs_legend=True),
 
         row("Message counters (this side only)", 11),
         stat(sent, f'sum(pp_side_messages_sent{{{R}}})', pos(0, 12, 6, 3), color="fixed", decimals=0),
@@ -70,7 +70,9 @@ def build(role, title, uid, port, intro, labels):
         logs(f"{labels['feed']}", labels["feed_desc"], f'{{job="pingpong",role="{role}",kind=~"TX|RX"}}', pos(0, 47, 24, 11)),
         logs("Lost / bad / wrong-DSCP messages (this side, every event)", "Empty means nothing was lost.", f'{{job="pingpong",role="{role}",kind=~"LOSS|BAD|DSCP"}}', pos(0, 58, 24, 5)),
     ]
-    # the per-group table's column names come from the first three query letters
+    for p_ in panels:                                     # the throughput panel got its own full-width row at y=11: push everything below it down
+        if p_["gridPos"]["y"] >= 11 and "throughput" not in p_.get("title", ""):
+            p_["gridPos"]["y"] += 7
     return {"uid": uid, "title": title, "tags": ["450", "cbs350", role == "A" and "sender" or "receiver"], "schemaVersion": 39, "version": 1,
             "editable": True, "refresh": "5s", "time": {"from": "now-15m", "to": "now"}, "timezone": "browser", "graphTooltip": 1,
             "annotations": {"list": [{"datasource": m.DS, "enable": True, "name": "This side running", "iconColor": "rgba(130,130,130,0.35)", "expr": f'pp_side_active{{{R}}} == 1',
