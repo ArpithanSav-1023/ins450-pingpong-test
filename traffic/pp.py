@@ -19,6 +19,7 @@ Stats are written to <run-dir>/stats_<role>.json every second (read by monitor/p
 Lab only: multicast TTL 1, 239.0.0.0/8 only, kill switch .STOP (scripts/estop.sh), 900 s cap.
 """
 import argparse
+import base64
 import json
 import os
 import re
@@ -28,6 +29,7 @@ import struct
 import multiprocessing as mp
 import threading
 import time
+import zlib
 
 from . import common as c
 from . import sender450 as s450
@@ -422,8 +424,12 @@ def handshake(a, e):
         t0 = time.time()
         sk = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sk.bind((e.my_ip, 0))
+        pkt = b"PPHELLO %.3f" % a.start_in
+        if getattr(a, "announce", False):       # HELLO2: also carry run name, duration and the scenario itself (receiver needs no arguments)
+            blob = base64.b64encode(zlib.compress(json.dumps(e.sc).encode())).decode()
+            pkt = f"PPHELLO2 {a.start_in:.3f} {a.duration or e.sc['duration_s']:.1f} {os.path.basename(a.run_dir.rstrip('/'))} {blob}".encode()
         for _ in range(8):                      # a few copies, in case the first is lost
-            sk.sendto(b"PPHELLO %.3f" % a.start_in, (e.peer_ip, CTRL_PORT))
+            sk.sendto(pkt, (e.peer_ip, CTRL_PORT))
             time.sleep(0.1)
         a.start_at = t0 + a.start_in
         print(f"[A] HELLO sent, both ends start in {a.start_in - (time.time() - t0):.1f} s", flush=True)
@@ -455,6 +461,7 @@ def main():
     ap.add_argument("--duration", type=float)
     ap.add_argument("--start-at", type=float, help="epoch seconds at which senders start")
     ap.add_argument("--start-in", type=float, help="role A: start N seconds after launch and tell B (no clock sync needed; B runs with --arm)")
+    ap.add_argument("--announce", action="store_true", help="role A with --start-in: put run name, duration and scenario into the HELLO (for traffic.receiver)")
     ap.add_argument("--arm", action="store_true", help="role B: wait for A's HELLO, then start with it")
     ap.add_argument("--arm-timeout", type=float, default=900.0)
     ap.add_argument("--local", action="store_true", help="loopback self-test: unicast between 127.0.0.1 and 127.0.0.2")

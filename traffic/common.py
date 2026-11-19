@@ -19,7 +19,7 @@ import time
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Kept inside the project folder (not /tmp): files made by the root-run controller stay deletable by you.
 STOP_FILE = os.environ.get("SNMP_DEMO_STOP_FILE", os.path.join(PROJECT_ROOT, ".STOP"))
-MAX_DURATION_S = 900
+MAX_DURATION_S = 3600
 
 # DSCP code points (decimal). IP TOS byte = DSCP << 2.
 DSCP = {"CS0": 0, "CS1": 8, "CS2": 16, "CS3": 24, "CS4": 32, "AF11": 10, "AF21": 18, "AF31": 26, "AF41": 34, "CS5": 40, "EF": 46, "CS6": 48}
