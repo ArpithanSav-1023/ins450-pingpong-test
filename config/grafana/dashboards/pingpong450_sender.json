@@ -732,12 +732,13 @@
    "options": {
     "legend": {
      "displayMode": "table",
-     "placement": "bottom",
+     "placement": "right",
      "showLegend": true,
      "calcs": [
       "lastNotNull",
       "max"
-     ]
+     ],
+     "width": 330
     },
     "tooltip": {
      "mode": "multi",

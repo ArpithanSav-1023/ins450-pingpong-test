@@ -43,7 +43,7 @@ def timeseries(title, desc, targets, grid, unit="short", overrides=(), ymax=None
         ov.append({"matcher": {"id": "byRegexp", "options": ".*MB/s.*"},
                    "properties": [{"id": "custom.hideFrom", "value": {"viz": True, "legend": False, "tooltip": False}}, {"id": "unit", "value": "suffix: MB/s"}, {"id": "decimals", "value": 2}]})
         ov.append({"matcher": {"id": "byRegexp", "options": ".*Mbit/s.*"}, "properties": [{"id": "decimals", "value": 1}]})
-        legend = {"displayMode": "table", "placement": "bottom", "showLegend": True, "calcs": ["lastNotNull", "max"]}
+        legend = {"displayMode": "table", "placement": "right", "showLegend": True, "calcs": ["lastNotNull", "max"], "width": 330}
     return {"id": nxt(), "type": "timeseries", "title": title, "description": desc, "datasource": DS, "gridPos": grid, "targets": targets,
             "fieldConfig": {"defaults": d, "overrides": ov},
             "options": {"legend": legend, "tooltip": {"mode": "multi", "sort": "desc"}}}
