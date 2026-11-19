@@ -20,7 +20,7 @@ FILL_PAYLOAD = 1400
 
 
 def newest_run(runs):
-    c = [d for d in glob.glob(os.path.join(runs, "*")) if os.path.exists(os.path.join(d, "stats_A.json"))]
+    c = [d for d in glob.glob(os.path.join(runs, "*")) + glob.glob(os.path.join(runs, "*", "*")) if os.path.exists(os.path.join(d, "stats_A.json"))]
     return max(c, key=os.path.getmtime) if c else None
 
 
@@ -53,6 +53,23 @@ def main():
         "d_sent": Gauge("pp_data_bytes_sent", "payload bytes sent (mix + filler)", D), "d_recv": Gauge("pp_data_bytes_received", "payload bytes received", D),
         "d_lost": Gauge("pp_data_bytes_lost", "payload bytes lost (estimate from gaps)", D), "d_loss": Gauge("pp_data_loss_percent", "data loss %", D),
     }
+    # per-side metrics: each side (role A = sender PC, role B = receiver/echo PC) exported on its own, from its OWN stats file only,
+    # so a side can be shown (and run) individually. role A/B; "received" = what that side's receiver counted.
+    R, RG = ["role"], ["role", "group"]
+    sd = {
+        "sent": Gauge("pp_side_msgs_sent", "messages this side sent", RG), "recv": Gauge("pp_side_msgs_received", "messages this side received", RG),
+        "lost": Gauge("pp_side_msgs_lost", "messages this side saw missing (sequence gaps)", RG), "bad": Gauge("pp_side_msgs_bad", "bad messages received", RG),
+        "wrong": Gauge("pp_side_msgs_wrong_dscp", "messages received with the wrong DSCP", RG),
+        "sbytes": Gauge("pp_side_msg_bytes_sent", "mix payload bytes sent", RG), "rbytes": Gauge("pp_side_msg_bytes_received", "mix payload bytes received", RG),
+        "fs": Gauge("pp_side_filler_pkts_sent", "ONF dump packets sent", R), "fr": Gauge("pp_side_filler_pkts_received", "ONF dump packets received", R),
+        "fl": Gauge("pp_side_filler_pkts_lost", "ONF dump packets this side saw missing", R),
+        "ps": Gauge("pp_side_packets_sent", "all packets sent (mix + ONF)", R), "pr": Gauge("pp_side_packets_received", "all packets received", R),
+        "pl": Gauge("pp_side_packets_lost", "all packets seen missing", R),
+        "ms": Gauge("pp_side_messages_sent", "all messages sent", R), "mr": Gauge("pp_side_messages_received", "all messages received", R),
+        "ml": Gauge("pp_side_messages_lost", "all messages seen missing", R),
+        "active": Gauge("pp_side_active", "1 while this side is running", R), "elapsed": Gauge("pp_side_sent_seconds", "seconds this side has been sending", R),
+    }
+    side_info = Gauge("pp_side_info", "run followed by this side", ["role", "run", "scenario"])
     target_g = Gauge("pp_target_mbps", "offered wire rate per direction (mix + filler)")
     active_g = Gauge("pp_run_active", "1 while a test is running")
     info_g = Gauge("pp_run_info", "newest run", ["run", "scenario"])
@@ -100,6 +117,27 @@ def main():
                 g["d_loss"].labels(d).set(100 * dl / tot if tot else 0)
         else:
             active_g.set(0)
+        for gg in list(sd.values()) + [side_info]:
+            gg.clear()
+        for role in "AB":
+            st = S.get(role) if run else None
+            if not st:
+                continue
+            ms = mr = ml = 0
+            for grp, t in st["tx"].items():
+                rx = st["rx"].get(grp, {"msgs": 0, "bytes": 0, "lost": 0, "bad": 0, "wrong_dscp": 0})
+                L = (role, grp)
+                sd["sent"].labels(*L).set(t["msgs"]); sd["recv"].labels(*L).set(rx["msgs"]); sd["lost"].labels(*L).set(rx["lost"])
+                sd["bad"].labels(*L).set(rx["bad"]); sd["wrong"].labels(*L).set(rx["wrong_dscp"])
+                sd["sbytes"].labels(*L).set(t["bytes"]); sd["rbytes"].labels(*L).set(rx["bytes"])
+                ms += t["msgs"]; mr += rx["msgs"]; ml += rx["lost"]
+            f = st["filler"]
+            sd["fs"].labels(role).set(f["tx_pkts"]); sd["fr"].labels(role).set(f["rx_pkts"]); sd["fl"].labels(role).set(f["rx_lost"])
+            sd["ps"].labels(role).set(ms + f["tx_pkts"]); sd["pr"].labels(role).set(mr + f["rx_pkts"]); sd["pl"].labels(role).set(ml + f["rx_lost"])
+            sd["ms"].labels(role).set(ms); sd["mr"].labels(role).set(mr); sd["ml"].labels(role).set(ml)
+            sd["active"].labels(role).set(1 if time.time() - st["ts"] < 4 and not st["final"] else 0)
+            sd["elapsed"].labels(role).set(st.get("sent_secs") or 0)
+            side_info.labels(role, os.path.basename(run), st["scenario"]).set(1)
         time.sleep(1.0)
 
 

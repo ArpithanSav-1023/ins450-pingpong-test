@@ -57,7 +57,6 @@ for t, d, o in runs:
             order.append(k)
         s, rc = int(row["sent"]), int(row["received"])
         rows[k]["loss"][t] = round(100 * (s - rc) / s, 1) if s else 0
-sc = json.load(open(os.path.join(ROOT, "runs", os.path.basename(runs[0][1]), "scenario.json")))
 sc0 = json.load(open(os.path.join(runs[0][1], "scenario.json")))
 info = {g["name"]: (g["addr"], f"CS{g['cos']}") for g in sc0["groups"]}
 ws.append(["Group", "Multicast address", "CoS (DSCP class)"] + [f"{t} Mbps lost %" for t, _, _ in runs] + ["Messages sent (per run)", "Payload sent (MB per run)"])

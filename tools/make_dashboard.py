@@ -217,6 +217,7 @@ dash = {
                               "step": "5s", "titleFormat": "Test running", "useValueForTime": False}]},
     "panels": panels, "templating": {"list": []},
 }
-out = os.path.join(ROOT, "config/grafana/dashboards/pingpong450.json")
-json.dump(dash, open(out, "w"), indent=1)
-print(out, len(panels), "panels")
+if __name__ == "__main__":
+    out = os.path.join(ROOT, "config/grafana/dashboards/pingpong450.json")
+    json.dump(dash, open(out, "w"), indent=1)
+    print(out, len(panels), "panels")

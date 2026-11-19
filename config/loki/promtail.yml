@@ -13,7 +13,7 @@ scrape_configs:
       - targets: [localhost]
         labels:
           job: pingpong
-          __path__: /runs/*/feed_*.log
+          __path__: /runs/**/feed_*.log
     pipeline_stages:
       - regex:
           expression: '^(?P<role>[AB]) (?P<kind>[A-Z]+)\s'
