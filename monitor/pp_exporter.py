@@ -72,6 +72,9 @@ def main():
         "active": Gauge("pp_side_active", "1 while this side is running", R), "elapsed": Gauge("pp_side_sent_seconds", "seconds this side has been sending", R),
     }
     side_info = Gauge("pp_side_info", "run followed by this side", ["role", "run", "scenario"])
+    # which switch port THIS PC is plugged into (the 100 Mbit/s USB NIC = GE9, otherwise GE1), so dashboards pick the right port by themselves
+    port = os.environ.get("PP_PORT") or ("GE9" if os.path.exists("/sys/class/net/enx207bd51e1472") else "GE1")
+    Gauge("pp_this_pc_port", "switch port this PC is connected to", ["port", "name"]).labels("gi" + port[2:], port).set(1)
     target_g = Gauge("pp_target_mbps", "offered wire rate per direction (mix + filler)")
     active_g = Gauge("pp_run_active", "1 while a test is running")
     info_g = Gauge("pp_run_info", "newest run", ["run", "scenario"])
