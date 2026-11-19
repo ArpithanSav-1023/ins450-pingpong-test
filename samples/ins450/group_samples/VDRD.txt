@@ -1,0 +1,13 @@
+# VDRD  239.192.0.5:60005  CoS 3  DSCP CS3  IP_TOS 0x60
+# 10 rounds, system SFIs, generated 2026-11-18T12:19:05Z
+
+VDRD   239.192.0.5:60005  CS3  UdPbC\0\s:FR0001,n:1*15\$FRALR,121905.91,001,A,V,TEST fire detector loop 1 zone 3*7D
+VDRD   239.192.0.5:60005  CS3  UdPbC\0\s:FR0001,n:2*16\$FRALR,121906.02,001,A,V,TEST fire detector loop 1 zone 3*74
+VDRD   239.192.0.5:60005  CS3  UdPbC\0\s:FR0001,n:3*17\$FRALR,121906.12,001,A,V,TEST fire detector loop 1 zone 3*75
+VDRD   239.192.0.5:60005  CS3  UdPbC\0\s:FR0001,n:4*10\$FRALR,121906.22,001,A,V,TEST fire detector loop 1 zone 3*76
+VDRD   239.192.0.5:60005  CS3  UdPbC\0\s:FR0001,n:5*11\$FRALR,121906.32,001,A,V,TEST fire detector loop 1 zone 3*77
+VDRD   239.192.0.5:60005  CS3  UdPbC\0\s:FR0001,n:6*12\$FRALR,121906.42,001,A,V,TEST fire detector loop 1 zone 3*70
+VDRD   239.192.0.5:60005  CS3  UdPbC\0\s:FR0001,n:7*13\$FRALR,121906.52,001,A,V,TEST fire detector loop 1 zone 3*71
+VDRD   239.192.0.5:60005  CS3  UdPbC\0\s:FR0001,n:8*1C\$FRALR,121906.62,001,A,V,TEST fire detector loop 1 zone 3*72
+VDRD   239.192.0.5:60005  CS3  UdPbC\0\s:FR0001,n:9*1D\$FRALR,121906.72,001,A,V,TEST fire detector loop 1 zone 3*73
+VDRD   239.192.0.5:60005  CS3  UdPbC\0\s:FR0001,n:10*25\$FRALR,121906.82,001,A,V,TEST fire detector loop 1 zone 3*7C

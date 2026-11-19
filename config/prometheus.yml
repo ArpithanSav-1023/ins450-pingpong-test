@@ -1,0 +1,10 @@
+global:
+  scrape_interval: 5s
+scrape_configs:
+  - job_name: cbs350_ports      # SNMP poller (monitor/poller.py)
+    static_configs:
+      - targets: ["127.0.0.1:9101"]
+  - job_name: pingpong          # message/packet/data loss and counters (monitor/pp_exporter.py)
+    scrape_interval: 2s
+    static_configs:
+      - targets: ["127.0.0.1:9103"]

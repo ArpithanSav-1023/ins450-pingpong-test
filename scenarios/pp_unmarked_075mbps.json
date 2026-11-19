@@ -1,0 +1,282 @@
+{
+ "name": "pp_unmarked_075mbps",
+ "duration_s": 600,
+ "target_mbps": 75,
+ "mix_hz": 4,
+ "tx_ip": "192.168.50.1",
+ "rx_ip": "192.168.50.2",
+ "groups": [
+  {
+   "name": "MISC",
+   "addr": "239.192.0.1",
+   "port": 60001,
+   "per_round": 1,
+   "cos": 2,
+   "data_type": "NMEA 0183",
+   "header": "UdPbC"
+  },
+  {
+   "name": "TGTD",
+   "addr": "239.192.0.2",
+   "port": 60002,
+   "per_round": 2,
+   "cos": 5,
+   "data_type": "NMEA 0183",
+   "header": "UdPbC"
+  },
+  {
+   "name": "SATD",
+   "addr": "239.192.0.3",
+   "port": 60003,
+   "per_round": 3,
+   "cos": 5,
+   "data_type": "NMEA 0183",
+   "header": "UdPbC"
+  },
+  {
+   "name": "NAVD",
+   "addr": "239.192.0.4",
+   "port": 60004,
+   "per_round": 5,
+   "cos": 5,
+   "data_type": "NMEA 0183",
+   "header": "UdPbC"
+  },
+  {
+   "name": "VDRD",
+   "addr": "239.192.0.5",
+   "port": 60005,
+   "per_round": 1,
+   "cos": 3,
+   "data_type": "NMEA 0183",
+   "header": "UdPbC"
+  },
+  {
+   "name": "RCOM",
+   "addr": "239.192.0.6",
+   "port": 60006,
+   "per_round": 1,
+   "cos": 4,
+   "data_type": "NMEA 0183",
+   "header": "UdPbC"
+  },
+  {
+   "name": "TIME",
+   "addr": "239.192.0.7",
+   "port": 60007,
+   "per_round": 1,
+   "cos": 3,
+   "data_type": "NMEA 0183",
+   "header": "UdPbC"
+  },
+  {
+   "name": "PROP",
+   "addr": "239.192.0.8",
+   "port": 60008,
+   "per_round": 1,
+   "cos": 1,
+   "data_type": "NMEA 0183",
+   "header": "UdPbC"
+  },
+  {
+   "name": "USR1",
+   "addr": "239.192.0.9",
+   "port": 60009,
+   "per_round": 1,
+   "cos": 1,
+   "data_type": "NMEA 0183",
+   "header": "UdPbC"
+  },
+  {
+   "name": "USR2",
+   "addr": "239.192.0.10",
+   "port": 60010,
+   "per_round": 1,
+   "cos": 1,
+   "data_type": "NMEA 0183",
+   "header": "UdPbC"
+  },
+  {
+   "name": "USR3",
+   "addr": "239.192.0.11",
+   "port": 60011,
+   "per_round": 1,
+   "cos": 1,
+   "data_type": "NMEA 0183",
+   "header": "UdPbC"
+  },
+  {
+   "name": "USR4",
+   "addr": "239.192.0.12",
+   "port": 60012,
+   "per_round": 1,
+   "cos": 1,
+   "data_type": "NMEA 0183",
+   "header": "UdPbC"
+  },
+  {
+   "name": "USR5",
+   "addr": "239.192.0.13",
+   "port": 60013,
+   "per_round": 1,
+   "cos": 1,
+   "data_type": "NMEA 0183",
+   "header": "UdPbC"
+  },
+  {
+   "name": "USR6",
+   "addr": "239.192.0.14",
+   "port": 60014,
+   "per_round": 1,
+   "cos": 1,
+   "data_type": "NMEA 0183",
+   "header": "UdPbC"
+  },
+  {
+   "name": "USR7",
+   "addr": "239.192.0.15",
+   "port": 60015,
+   "per_round": 1,
+   "cos": 1,
+   "data_type": "NMEA 0183",
+   "header": "UdPbC"
+  },
+  {
+   "name": "USR8",
+   "addr": "239.192.0.16",
+   "port": 60016,
+   "per_round": 1,
+   "cos": 1,
+   "data_type": "NMEA 0183",
+   "header": "UdPbC"
+  },
+  {
+   "name": "BAM1",
+   "addr": "239.192.0.17",
+   "port": 60017,
+   "per_round": 1,
+   "cos": 3,
+   "data_type": "NMEA 0183",
+   "header": "UdPbC"
+  },
+  {
+   "name": "BAM2",
+   "addr": "239.192.0.18",
+   "port": 60018,
+   "per_round": 1,
+   "cos": 3,
+   "data_type": "NMEA 0183",
+   "header": "UdPbC"
+  },
+  {
+   "name": "CAM1",
+   "addr": "239.192.0.19",
+   "port": 60019,
+   "per_round": 1,
+   "cos": 3,
+   "data_type": "NMEA 0183",
+   "header": "UdPbC"
+  },
+  {
+   "name": "CAM2",
+   "addr": "239.192.0.20",
+   "port": 60020,
+   "per_round": 1,
+   "cos": 3,
+   "data_type": "NMEA 0183",
+   "header": "UdPbC"
+  },
+  {
+   "name": "NETA",
+   "addr": "239.192.0.56",
+   "port": 60056,
+   "per_round": 2,
+   "cos": 7,
+   "data_type": "NMEA 0183",
+   "header": "UdPbC"
+  },
+  {
+   "name": "PGP1",
+   "addr": "239.192.0.57",
+   "port": 60057,
+   "per_round": 1,
+   "cos": 2,
+   "data_type": "Binary",
+   "header": "NkPgN"
+  },
+  {
+   "name": "PGP2",
+   "addr": "239.192.0.58",
+   "port": 60058,
+   "per_round": 1,
+   "cos": 2,
+   "data_type": "Binary",
+   "header": "NkPgN"
+  },
+  {
+   "name": "PGP3",
+   "addr": "239.192.0.59",
+   "port": 60059,
+   "per_round": 1,
+   "cos": 2,
+   "data_type": "Binary",
+   "header": "NkPgN"
+  },
+  {
+   "name": "PGP4",
+   "addr": "239.192.0.60",
+   "port": 60060,
+   "per_round": 1,
+   "cos": 2,
+   "data_type": "Binary",
+   "header": "NkPgN"
+  },
+  {
+   "name": "PGB1",
+   "addr": "239.192.0.61",
+   "port": 60061,
+   "per_round": 1,
+   "cos": 2,
+   "data_type": "Binary",
+   "header": "NkPgN"
+  },
+  {
+   "name": "PGB2",
+   "addr": "239.192.0.62",
+   "port": 60062,
+   "per_round": 1,
+   "cos": 2,
+   "data_type": "Binary",
+   "header": "NkPgN"
+  },
+  {
+   "name": "PGB3",
+   "addr": "239.192.0.63",
+   "port": 60063,
+   "per_round": 1,
+   "cos": 2,
+   "data_type": "Binary",
+   "header": "NkPgN"
+  },
+  {
+   "name": "PGB4",
+   "addr": "239.192.0.64",
+   "port": 60064,
+   "per_round": 1,
+   "cos": 2,
+   "data_type": "Binary",
+   "header": "NkPgN"
+  },
+  {
+   "name": "SYSLOG",
+   "addr": "239.192.0.254",
+   "port": 514,
+   "per_round": 1,
+   "cos": 7,
+   "data_type": "Syslog",
+   "header": "none (RFC 5424 text)"
+  }
+ ],
+ "_note": "UNMARKED: the sender puts DSCP 0 on every packet (multiplexer that cannot mark). Compare with pp_<rate>mbps (marked) and with the same run after the switch classifies on ingress.",
+ "marking": "none"
+}
