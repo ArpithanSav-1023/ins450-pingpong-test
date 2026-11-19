@@ -413,6 +413,40 @@ def load_pool(charts_dir, size=16 << 20):
     return bytes(pool[:size])
 
 
+CTRL_PORT = 20999   # tiny handshake: A tells B "I start in N seconds", so the two PCs need no shared clock
+
+
+def handshake(a, e):
+    """Relative start. A (--start-in N) sends HELLO to B and starts N s later; B (--arm) waits for the HELLO, then starts N s after receiving it."""
+    if a.role == "A":
+        t0 = time.time()
+        sk = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sk.bind((e.my_ip, 0))
+        for _ in range(8):                      # a few copies, in case the first is lost
+            sk.sendto(b"PPHELLO %.3f" % a.start_in, (e.peer_ip, CTRL_PORT))
+            time.sleep(0.1)
+        a.start_at = t0 + a.start_in
+        print(f"[A] HELLO sent, both ends start in {a.start_in - (time.time() - t0):.1f} s", flush=True)
+    else:
+        sk = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sk.bind((e.my_ip, CTRL_PORT))
+        sk.settimeout(1.0)
+        deadline = time.time() + a.arm_timeout
+        print(f"[B] armed: waiting up to {a.arm_timeout:.0f} s for the sender's HELLO on {e.my_ip}:{CTRL_PORT}", flush=True)
+        while True:
+            if os.path.exists(c.STOP_FILE) or time.time() > deadline:
+                raise SystemExit("[B] no HELLO from the sender (stopped or timed out)")
+            try:
+                data, src = sk.recvfrom(100)
+            except socket.timeout:
+                continue
+            if data.startswith(b"PPHELLO "):
+                a.start_at = time.time() + float(data.split()[1]) - 0.001
+                print(f"[B] HELLO from {src[0]}: starting in {float(data.split()[1]):.1f} s", flush=True)
+                break
+    sk.close()
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--scenario", required=True)
@@ -420,10 +454,16 @@ def main():
     ap.add_argument("--run-dir", required=True)
     ap.add_argument("--duration", type=float)
     ap.add_argument("--start-at", type=float, help="epoch seconds at which senders start")
+    ap.add_argument("--start-in", type=float, help="role A: start N seconds after launch and tell B (no clock sync needed; B runs with --arm)")
+    ap.add_argument("--arm", action="store_true", help="role B: wait for A's HELLO, then start with it")
+    ap.add_argument("--arm-timeout", type=float, default=900.0)
     ap.add_argument("--local", action="store_true", help="loopback self-test: unicast between 127.0.0.1 and 127.0.0.2")
     ap.add_argument("--charts-dir", default=next((p for p in (os.path.join(c.PROJECT_ROOT, "samples", "charts", "charts_sample"), os.path.join(c.PROJECT_ROOT, "samples", "charts_pool")) if os.path.isdir(p)), None))
     a = ap.parse_args()
-    Endpoint(a, json.load(open(a.scenario))).run()
+    e = Endpoint(a, json.load(open(a.scenario)))
+    if a.start_in is not None or a.arm:
+        handshake(a, e)
+    e.run()
 
 
 if __name__ == "__main__":

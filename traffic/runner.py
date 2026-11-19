@@ -84,6 +84,7 @@ def main():
     ap.add_argument("--tx-host", default=os.environ.get("PP_TX_HOST"), help="user@host of a separate sender PC (endpoint A runs there over ssh; see scripts/sync_sender.sh)")
     ap.add_argument("--tx-dir", default=os.environ.get("PP_TX_DIR", "pp"), help="project folder on the sender PC (relative to its home)")
     ap.add_argument("--manual-sender", action="store_true", help="sender PC is started by hand: print its command, start only B here, then wait for stats_A.json to be copied back")
+    ap.add_argument("--arm-timeout", type=float, default=900.0, help="--manual-sender: how long B waits for the sender to start")
     ap.add_argument("--lead", type=float, default=120.0, help="--manual-sender: seconds from now until both ends start sending")
     ap.add_argument("--runs-dir", default=os.path.join(ROOT, "runs"))
     a = ap.parse_args()
@@ -130,7 +131,8 @@ def main():
         if remote and role == "A":
             rc = f"cd {a.tx_dir} && PYTHONPATH=. python3 -m traffic.pp --scenario {remote_run}/scenario.json --role A --run-dir {remote_run} --duration {dur} --start-at {start_at + offset}"
             return subprocess.Popen(["ssh", *SSH_OPTS, remote, rc])
-        cmd = [sys.executable, "-m", "traffic.pp", "--scenario", os.path.join(run_dir, "scenario.json"), "--role", role, "--run-dir", run_dir, "--duration", str(dur), "--start-at", str(start_at)]
+        cmd = [sys.executable, "-m", "traffic.pp", "--scenario", os.path.join(run_dir, "scenario.json"), "--role", role, "--run-dir", run_dir, "--duration", str(dur)]
+        cmd += ["--arm", "--arm-timeout", str(a.arm_timeout)] if (a.manual_sender and role == "B") else ["--start-at", str(start_at)]
         if a.local:
             cmd.append("--local")
         else:
@@ -141,8 +143,8 @@ def main():
     time.sleep(0.5)
     if a.manual_sender:
         name = os.path.basename(run_dir)
-        print(f"\n[runner] MANUAL SENDER. Paste this on the sender PC within {a.lead:.0f} s (both ends start sending at the same clock time, {time.strftime('%H:%M:%S', time.localtime(start_at))}):\n\n"
-              f"  cd ~/pp && mkdir -p runs/{name} && python3 -m traffic.pp --scenario scenarios/{os.path.basename(a.scenario)} --role A --run-dir runs/{name} --duration {dur} --start-at {start_at}\n", flush=True)
+        print(f"\n[runner] MANUAL SENDER. Receiver is armed (waits up to {a.arm_timeout:.0f} s). Paste this on the sender PC; both ends start 8 s after you press Enter (no clock sync needed):\n\n"
+              f"  cd ~/ins450-pingpong-test && git pull -q && mkdir -p runs/{name} && python3 -m traffic.pp --scenario scenarios/{os.path.basename(a.scenario)} --role A --run-dir runs/{name} --duration {dur} --start-in 8\n", flush=True)
         pa = None
     else:
         pa = launch("A", sc.get("tx_netns", "tx"))
@@ -160,8 +162,8 @@ def main():
     def wait_manual_stats():
         f = os.path.join(run_dir, "stats_A.json")
         print(f"[runner] receiver done. Copy the sender's results here (from the sender PC):\n\n"
-              f"  rsync -a ~/pp/runs/{os.path.basename(run_dir)}/ {os.environ.get('USER', 'user')}@<this-PC-ip>:{run_dir}/\n"
-              f"  (or copy ~/pp/runs/{os.path.basename(run_dir)}/stats_A.json and feed_A.log into {run_dir}/ by USB stick)\n", flush=True)
+              f"  rsync -a ~/ins450-pingpong-test/runs/{os.path.basename(run_dir)}/ {os.environ.get('USER', 'user')}@<this-PC-ip>:{run_dir}/\n"
+              f"  (or copy ~/ins450-pingpong-test/runs/{os.path.basename(run_dir)}/stats_A.json and feed_A.log into {run_dir}/ by USB stick)\n", flush=True)
         while not os.path.exists(os.path.join(c.PROJECT_ROOT, ".STOP")):
             try:
                 if json.load(open(f)).get("final"):
