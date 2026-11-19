@@ -21,10 +21,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs-dir", default=os.path.join(ROOT, "runs", "aspire_sender"))
     ap.add_argument("--ip", default="192.168.50.2")
+    ap.add_argument("--rate", type=float, help="expect exactly this load (Mbit/s); a sender that chooses another one is refused")
+    ap.add_argument("--minutes", type=float, help="expect exactly this length (minutes)")
     a = ap.parse_args()
     sk = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sk.bind((a.ip, CTRL_PORT))
     sk.settimeout(1.0)
+    seen_bad = None
     print(f"[receiver] waiting for the sender on {a.ip}:{CTRL_PORT} (Ctrl-C to quit)", flush=True)
     while True:
         if os.path.exists(c.STOP_FILE):
@@ -42,6 +45,17 @@ def main():
             n, dur = float(n), float(dur)
         except Exception as e:
             print("[receiver] ignoring a malformed HELLO:", e, flush=True)
+            continue
+        bad = []
+        if a.rate is not None and abs(float(sc.get("target_mbps", -1)) - a.rate) > 1e-9:
+            bad.append(f"load {sc.get('target_mbps'):g} Mbit/s (you typed {a.rate:g})")
+        if a.minutes is not None and abs(dur / 60 - a.minutes) > 0.01:
+            bad.append(f"length {dur / 60:g} min (you typed {a.minutes:g})")
+        if bad:
+            if run == seen_bad:
+                continue                  # the sender repeats its HELLO 8 times: report once
+            seen_bad = run
+            print("[receiver] MISMATCH, ignoring this sender: it chose " + " and ".join(bad) + ". Fix one side and start the sender again.", flush=True)
             continue
         break
     sk.close()

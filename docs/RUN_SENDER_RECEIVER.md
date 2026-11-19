@@ -8,7 +8,7 @@ Two PCs, each runs ONE script. You choose the load and the length on the **sende
 | This PC | **Receiver + echo** | GE1 | `scripts/receiver.sh` | http://localhost:3000/d/pingpong-450-receiver |
 
 ## Every run
-1. Receiver PC (once, leave it running): `scripts/receiver.sh`
+1. Receiver PC: `scripts/receiver.sh 50 10` (same two numbers as the sender; it refuses a sender that chose something else, and exits after the run). Without numbers it follows the sender run after run.
 2. Sender PC: `scripts/sender.sh 50 10`  (50 Mbit/s per direction, 10 minutes; without arguments it asks)
 
 The receiver gets the scenario, the length and the run name from the sender's start signal (HELLO), so nothing else is typed.
