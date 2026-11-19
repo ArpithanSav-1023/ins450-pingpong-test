@@ -127,8 +127,9 @@ def main():
 
     def launch(role, ns):
         if remote and role == "A":     # detached on the sender PC (survives a dropped ssh/Wi-Fi), relative start: no clock sync needed
-            rc = (f"cd {a.tx_dir} && PYTHONPATH=. nohup setsid python3 -m traffic.pp --scenario {remote_run}/scenario.json --role A --run-dir {remote_run} "
-                  f"--duration {dur} --start-in 8 > {remote_run}/stdout.log 2>&1 < /dev/null &")
+            rel = f"runs/{os.path.basename(run_dir)}"      # relative to the project folder on the sender PC
+            rc = (f"cd {a.tx_dir} && PYTHONPATH=. nohup setsid python3 -m traffic.pp --scenario {rel}/scenario.json --role A --run-dir {rel} "
+                  f"--duration {dur} --start-in 8 > {rel}/stdout.log 2>&1 < /dev/null &")
             return subprocess.Popen(["ssh", *SSH_OPTS, remote, rc])
         cmd = [sys.executable, "-m", "traffic.pp", "--scenario", os.path.join(run_dir, "scenario.json"), "--role", role, "--run-dir", run_dir, "--duration", str(dur)]
         cmd += ["--arm", "--arm-timeout", str(a.arm_timeout)] if ((a.manual_sender or remote) and role == "B") else ["--start-at", str(start_at)]
