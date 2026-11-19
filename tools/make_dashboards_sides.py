@@ -17,7 +17,8 @@ SENDER_PORT, RECEIVER_PORT = ("gi9", "GE9"), ("gi1", "GE1")
 def build(role, title, uid, port, intro, labels):
     m.pid[0] = 0
     R = f'role="{role}"'
-    P, PN = port
+    P, PN = "$port", "${port:text}"       # a dashboard variable: pick the switch port this PC is on (either PC can be the sender or the receiver)
+    default = port[0]
     sent, recv = labels["sent"], labels["recv"]
     panels = [
         text(intro, pos(0, 0, 13, 4)),
@@ -73,16 +74,19 @@ def build(role, title, uid, port, intro, labels):
             "editable": True, "refresh": "5s", "time": {"from": "now-15m", "to": "now"}, "timezone": "browser", "graphTooltip": 1,
             "annotations": {"list": [{"datasource": m.DS, "enable": True, "name": "This side running", "iconColor": "rgba(130,130,130,0.35)", "expr": f'pp_side_active{{{R}}} == 1',
                                       "step": "5s", "titleFormat": "Running", "useValueForTime": False}]},
-            "panels": panels, "templating": {"list": []}}
+            "panels": panels,
+            "templating": {"list": [{"name": "port", "label": "Switch port", "type": "custom", "query": "GE1 : gi1, GE9 : gi9", "multi": False, "includeAll": False,
+                                     "current": {"text": port[1], "value": default}, "options": [{"text": "GE1", "value": "gi1", "selected": default == "gi1"},
+                                                                                                    {"text": "GE9", "value": "gi9", "selected": default == "gi9"}]}]}}
 
 
-SENDER = build("A", "450 Ping-Pong: SENDER (separate PC on GE9)", "pingpong-450-sender", SENDER_PORT,
-               "## SENDER side  \nThis is the **separate PC on switch port GE9** (role A). It sends the 450 sample mix on every multicast group plus the ONF dump, and counts what **comes back** (the echo).  \n"
+SENDER = build("A", "450 Ping-Pong: SENDER", "pingpong-450-sender", SENDER_PORT,
+               "## SENDER side  \nThis is the **PC that runs `scripts/sender.sh`** (role A). Pick its switch port in the **Switch port** box above (GE9 for the Aspire, GE1 for the other PC). It sends the 450 sample mix on every multicast group plus the ONF dump, and counts what **comes back** (the echo).  \n"
                "Everything here is taken from the sender's **own** counters and its **own** switch port. *Missing* = messages that came back with a gap in the sequence numbers.",
                {"sent": "Sent", "recv": "Echoes received", "lost": "Echoes missing", "feed": "Sender: sent (TX) and echo received (RX)",
                 "feed_desc": "TX = this side sends the mix, RX = the echo coming back. Newest first."})
-RECEIVER = build("B", "450 Ping-Pong: RECEIVER + ECHO (this PC on GE1)", "pingpong-450-receiver", RECEIVER_PORT,
-                 "## RECEIVER side  \nThis is the **PC on switch port GE1** (role B). It **receives** the sender's mix and ONF dump, counts loss from the sequence numbers, and **echoes** every datagram back on the same group.  \n"
+RECEIVER = build("B", "450 Ping-Pong: RECEIVER + ECHO", "pingpong-450-receiver", RECEIVER_PORT,
+                 "## RECEIVER side  \nThis is the **PC that runs `scripts/receiver.sh`** (role B). Pick its switch port in the **Switch port** box above. It **receives** the sender's mix and ONF dump, counts loss from the sequence numbers, and **echoes** every datagram back on the same group.  \n"
                  "Everything here is taken from the receiver's **own** counters and its **own** switch port. *Missing* = messages that arrived with a gap in the sequence numbers.",
                  {"sent": "Echoed (sent back)", "recv": "Received", "lost": "Missing on arrival", "feed": "Receiver: received (RX) and echoed (TX)",
                   "feed_desc": "RX = mix arriving from the sender, TX = echo sent back. Newest first."})

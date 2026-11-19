@@ -4,7 +4,7 @@
 # Needs: sudo scripts/netns_setup.sh rxonly (once), ssh key to the sender PC. Emergency stop: scripts/estop.sh
 cd "$(cd "$(dirname "$0")/.." && pwd)" || exit 1
 export PP_TX_HOST=${PP_TX_HOST:-abhijith-m-b@192.168.1.40} PP_TX_DIR=${PP_TX_DIR:-ins450-pingpong-test}
-OUT=runs/aspire_sender
+OUT=runs/sender_GE9
 mkdir -p "$OUT"
 PROFILES=${*:-025 050 075 095}
 for p in $PROFILES; do

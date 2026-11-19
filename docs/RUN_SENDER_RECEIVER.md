@@ -13,7 +13,7 @@ Two PCs, each runs ONE script. You choose the load and the length on the **sende
 
 The receiver gets the scenario, the length and the run name from the sender's start signal (HELLO), so nothing else is typed.
 When the run ends the receiver fetches the sender's results over ssh and writes `summary.json`, `summary_groups.csv` and the Excel into
-`runs/aspire_sender/<run>/` (plus `all_profiles_summary.xlsx`). If ssh is down it tells you which two files to copy.
+`runs/sender_GE9/<run>/` (plus `all_profiles_summary.xlsx`). If ssh is down it tells you which two files to copy.
 Stop early: Ctrl-C on the sender (the receiver stops with it), or `scripts/estop.sh`.
 
 ## One-time setup

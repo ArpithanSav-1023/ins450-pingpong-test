@@ -1,5 +1,5 @@
 """After a run on the receiver PC: fetch the sender PC's results (ssh), then write summary.json / summary_groups.csv / Excel.
-    .venv/bin/python -m traffic.finish runs/aspire_sender/<run>      (no ssh? copy stats_A.json + feed_A.log into the run folder, then run it again)"""
+    .venv/bin/python -m traffic.finish runs/sender_GE9/<run>      (no ssh? copy stats_A.json + feed_A.log into the run folder, then run it again)"""
 import json
 import os
 import sys
@@ -8,8 +8,8 @@ import time
 from . import common as c
 from .runner import pull, print_summary, summarize
 
-HOST = os.environ.get("PP_TX_HOST", "abhijith-m-b@192.168.1.40")
-TXDIR = os.environ.get("PP_TX_DIR", "ins450-pingpong-test")
+HOST = os.environ.get("PP_PEER") or os.environ.get("PP_TX_HOST", "abhijith-m-b@192.168.1.40")      # the OTHER PC (the sender)
+TXDIR = os.environ.get("PP_PEER_DIR") or os.environ.get("PP_TX_DIR", "ins450-pingpong-test")
 
 
 def final(run_dir):

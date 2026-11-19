@@ -40,7 +40,10 @@ def main():
         sys.exit(f"{a.rate:g} Mbit/s does not fit through {nic} ({speed} Mbit/s link, about {0.97 * speed:.0f} possible). Lower the rate.")
     sc = json.load(open(a.base))
     tag = f"{a.rate:g}".replace(".", "p")
-    sc.update({"name": f"pp9_{int(a.rate):03d}mbps" if a.rate == int(a.rate) else f"pp9_{tag}mbps", "target_mbps": a.rate, "duration_s": secs})
+    mine = os.environ.get("PP_PORT", "GE9")                 # the switch port THIS (sending) PC is on
+    other = "GE1" if mine == "GE9" else "GE9"
+    sc.update({"name": f"pp9_{int(a.rate):03d}mbps" if a.rate == int(a.rate) else f"pp9_{tag}mbps", "target_mbps": a.rate, "duration_s": secs,
+               "a_port": mine, "b_port": other})
     mins = f"{secs / 60:g}min"
     run = f"{sc['name']}_{mins}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
     run_dir = os.path.join(ROOT, "runs", run)
@@ -56,6 +59,8 @@ def main():
               f"{s['filler']['tx_pkts']} ONF packets sent / {s['filler']['rx_pkts']} received. Full summary is built on the receiver PC.", flush=True)
     except (OSError, ValueError, KeyError):
         pass
+    if os.environ.get("SUDO_UID"):     # run as root inside the namespace: hand the files back to you
+        subprocess.run(["chown", "-R", f"{os.environ['SUDO_UID']}:{os.environ.get('SUDO_GID', os.environ['SUDO_UID'])}", run_dir])
     sys.exit(rc)
 
 

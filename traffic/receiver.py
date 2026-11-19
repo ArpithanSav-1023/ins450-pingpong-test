@@ -19,7 +19,7 @@ ROOT = c.PROJECT_ROOT
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--runs-dir", default=os.path.join(ROOT, "runs", "aspire_sender"))
+    ap.add_argument("--runs-dir", default=None, help="default: runs/sender_<port of the sender>, e.g. runs/sender_GE9")
     ap.add_argument("--ip", default="192.168.50.2")
     ap.add_argument("--rate", type=float, help="expect exactly this load (Mbit/s); a sender that chooses another one is refused")
     ap.add_argument("--minutes", type=float, help="expect exactly this length (minutes)")
@@ -59,7 +59,7 @@ def main():
             continue
         break
     sk.close()
-    run_dir = os.path.join(a.runs_dir, run)
+    run_dir = os.path.join(a.runs_dir or os.path.join(ROOT, "runs", "sender_" + sc.get("a_port", "GE9")), run)
     os.makedirs(run_dir, exist_ok=True)
     json.dump(sc, open(os.path.join(run_dir, "scenario.json"), "w"), indent=1)
     print(f"[receiver] HELLO from {src[0]}: {sc['name']}, {dur:.0f} s, target {sc.get('target_mbps')} Mbit/s -> {run_dir}  (starting in {n:.0f} s)", flush=True)

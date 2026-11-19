@@ -1,6 +1,6 @@
 {
  "uid": "pingpong-450-sender",
- "title": "450 Ping-Pong: SENDER (separate PC on GE9)",
+ "title": "450 Ping-Pong: SENDER",
  "tags": [
   "450",
   "cbs350",
@@ -46,7 +46,7 @@
    },
    "options": {
     "mode": "markdown",
-    "content": "## SENDER side  \nThis is the **separate PC on switch port GE9** (role A). It sends the 450 sample mix on every multicast group plus the ONF dump, and counts what **comes back** (the echo).  \nEverything here is taken from the sender's **own** counters and its **own** switch port. *Missing* = messages that came back with a gap in the sequence numbers."
+    "content": "## SENDER side  \nThis is the **PC that runs `scripts/sender.sh`** (role A). Pick its switch port in the **Switch port** box above (GE9 for the Aspire, GE1 for the other PC). It sends the 450 sample mix on every multicast group plus the ONF dump, and counts what **comes back** (the echo).  \nEverything here is taken from the sender's **own** counters and its **own** switch port. *Missing* = messages that came back with a gap in the sequence numbers."
    }
   },
   {
@@ -329,7 +329,7 @@
   {
    "id": 6,
    "type": "row",
-   "title": "This side's switch port: GE9 (SNMP every 5 s)",
+   "title": "This side's switch port: ${port:text} (SNMP every 5 s)",
    "collapsed": false,
    "gridPos": {
     "x": 0,
@@ -342,7 +342,7 @@
   {
    "id": 7,
    "type": "gauge",
-   "title": "GE9 in (this side sends)",
+   "title": "${port:text} in (this side sends)",
    "datasource": {
     "type": "prometheus",
     "uid": "prom"
@@ -359,7 +359,7 @@
       "type": "prometheus",
       "uid": "prom"
      },
-     "expr": "cbs_port_rx_util_percent{port=\"gi9\"}",
+     "expr": "cbs_port_rx_util_percent{port=\"$port\"}",
      "legendFormat": "",
      "refId": "A",
      "instant": true,
@@ -410,7 +410,7 @@
   {
    "id": 8,
    "type": "gauge",
-   "title": "GE9 out (this side receives)",
+   "title": "${port:text} out (this side receives)",
    "datasource": {
     "type": "prometheus",
     "uid": "prom"
@@ -427,7 +427,7 @@
       "type": "prometheus",
       "uid": "prom"
      },
-     "expr": "cbs_port_tx_util_percent{port=\"gi9\"}",
+     "expr": "cbs_port_tx_util_percent{port=\"$port\"}",
      "legendFormat": "",
      "refId": "A",
      "instant": true,
@@ -478,7 +478,7 @@
   {
    "id": 9,
    "type": "timeseries",
-   "title": "GE9 utilisation over time (%)",
+   "title": "${port:text} utilisation over time (%)",
    "description": "Dashed: IEC 61162-460 80 % design limit and 90 % load alert.",
    "datasource": {
     "type": "prometheus",
@@ -496,7 +496,7 @@
       "type": "prometheus",
       "uid": "prom"
      },
-     "expr": "cbs_port_rx_util_percent{port=\"gi9\"}",
+     "expr": "cbs_port_rx_util_percent{port=\"$port\"}",
      "legendFormat": "in",
      "refId": "A"
     },
@@ -505,7 +505,7 @@
       "type": "prometheus",
       "uid": "prom"
      },
-     "expr": "cbs_port_tx_util_percent{port=\"gi9\"}",
+     "expr": "cbs_port_tx_util_percent{port=\"$port\"}",
      "legendFormat": "out",
      "refId": "B"
     }
@@ -593,7 +593,7 @@
   {
    "id": 10,
    "type": "timeseries",
-   "title": "GE9 throughput (Mbit/s)",
+   "title": "${port:text} throughput (Mbit/s)",
    "description": "Wire rate seen by the switch on this side's port.",
    "datasource": {
     "type": "prometheus",
@@ -611,7 +611,7 @@
       "type": "prometheus",
       "uid": "prom"
      },
-     "expr": "cbs_port_rx_bps{port=\"gi9\"} / 1e6",
+     "expr": "cbs_port_rx_bps{port=\"$port\"} / 1e6",
      "legendFormat": "in",
      "refId": "A"
     },
@@ -620,7 +620,7 @@
       "type": "prometheus",
       "uid": "prom"
      },
-     "expr": "cbs_port_tx_bps{port=\"gi9\"} / 1e6",
+     "expr": "cbs_port_tx_bps{port=\"$port\"} / 1e6",
      "legendFormat": "out",
      "refId": "B"
     }
@@ -1742,6 +1742,31 @@
   }
  ],
  "templating": {
-  "list": []
+  "list": [
+   {
+    "name": "port",
+    "label": "Switch port",
+    "type": "custom",
+    "query": "GE1 : gi1, GE9 : gi9",
+    "multi": false,
+    "includeAll": false,
+    "current": {
+     "text": "GE9",
+     "value": "gi9"
+    },
+    "options": [
+     {
+      "text": "GE1",
+      "value": "gi1",
+      "selected": false
+     },
+     {
+      "text": "GE9",
+      "value": "gi9",
+      "selected": true
+     }
+    ]
+   }
+  ]
  }
 }

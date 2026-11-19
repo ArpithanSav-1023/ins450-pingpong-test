@@ -6,6 +6,8 @@
 # Run: sudo scripts/netns_setup.sh      Undo: sudo scripts/netns_teardown.sh
 # Sender on ANOTHER PC (plugged into GE9, 192.168.50.1):  sudo scripts/netns_setup.sh rxonly
 #   rx only: veth into nm-bridge (-> enp3s0 -> switch GE1, 1 Gbit/s) = receiver + echo endpoint (role B, 192.168.50.2)
+# This PC is the SENDER (the other PC, on GE9, is the receiver at 192.168.50.2):  sudo scripts/netns_setup.sh txonly
+#   tx only: veth into nm-bridge (-> enp3s0 -> switch GE1) = sender endpoint (role A, 192.168.50.1)
 # Swapped direction:  sudo scripts/netns_setup.sh swap
 #   tx: macvlan on the USB NIC (-> switch GE9, 100 Mbit/s uplink)   rx: veth into nm-bridge (-> enp3s0 -> switch GE1, 1 Gbit/s)
 set -euo pipefail
@@ -13,15 +15,22 @@ BRIDGE=${BRIDGE:-nm-bridge}
 RX_NIC=${RX_NIC:-enx207bd51e1472}
 TX_IP=${TX_IP:-192.168.50.1/24}
 RX_IP=${RX_IP:-192.168.50.2/24}
-MODE=${1:-normal}   # normal | swap | rxonly
+MODE=${1:-normal}   # normal | swap | rxonly | txonly
 
 [ "$(id -u)" = 0 ] || { echo "run with sudo"; exit 1; }
 ip netns list | grep -qwE "tx|rx" && { echo "namespaces already exist (run netns_teardown.sh first)"; exit 1; }
 
 [ "$MODE" = "rxonly" ] || ip netns add tx
-ip netns add rx
+[ "$MODE" = "txonly" ] || ip netns add rx
 
-if [ "$MODE" = "rxonly" ]; then
+if [ "$MODE" = "txonly" ]; then
+  ip link add veth-tx type veth peer name eth0 netns tx
+  ip link set veth-tx master "$BRIDGE" up
+  ip -n tx addr add "$TX_IP" dev eth0
+  ip -n tx link set eth0 up
+  ip -n tx link set lo up
+  BRPORT=veth-tx
+elif [ "$MODE" = "rxonly" ]; then
   ip link add veth-rx type veth peer name eth0 netns rx
   ip link set veth-rx master "$BRIDGE" up
   ip -n rx addr add "$RX_IP" dev eth0
@@ -74,7 +83,10 @@ for i in $(seq 1 40); do
   sleep 1
 done
 bridge link show dev "$BRPORT"
-if [ "$MODE" = "rxonly" ]; then
+if [ "$MODE" = "txonly" ]; then
+  echo "ping test tx -> receiver PC (${RX_IP%/*}):"
+  ip netns exec tx ping -c 3 -W 2 "${RX_IP%/*}" || echo "PING FAILED (is the other PC's NIC set to ${RX_IP} (scripts/nic_role.sh receiver) and cabled to the switch?)"
+elif [ "$MODE" = "rxonly" ]; then
   echo "ping test rx -> sender PC (${TX_IP%/*}):"
   ip netns exec rx ping -c 3 -W 2 "${TX_IP%/*}" || echo "PING FAILED (is the sender PC's NIC set to ${TX_IP} and cabled to the switch?)"
 else

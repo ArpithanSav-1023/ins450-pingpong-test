@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
-# RECEIVER + ECHO PC (switch port GE1). Same arguments as the sender, so you type the same thing on both PCs:
+# RECEIVER + ECHO side. Works on either PC. Same arguments as the sender, so you type the same thing on both PCs:
 #     scripts/receiver.sh 75 10        # wait for ONE run of 75 Mbit/s, 10 minutes (refuses a sender that chose something else), then exit
 #     scripts/receiver.sh              # no arguments: follow whatever the sender chooses, run after run, until Ctrl-C
-# After each run it fetches the sender's results, writes the summary + Excel.
-# Dashboard: http://localhost:3000/d/pingpong-450-receiver     Stop: Ctrl-C (or scripts/estop.sh to stop a run in progress)
-cd "$(cd "$(dirname "$0")/.." && pwd)" || exit 1
-ROOT=$PWD
+# This PC needs: the GE1 PC -> sudo scripts/netns_setup.sh rxonly; the Aspire -> its test NIC at 192.168.50.2 (sudo scripts/nic_role.sh receiver)
+# After each run it fetches the sender's results over ssh and writes the summary + Excel.
+# Dashboard: http://localhost:3000/d/pingpong-450-receiver  (pick this PC's switch port in the "Switch port" box at the top)
+source "$(dirname "$0")/_pp_env.sh"
 RATE=${1:-}; MIN=${2:-}
 ARGS=(); [ -n "$RATE" ] && ARGS+=(--rate "$RATE"); [ -n "$MIN" ] && ARGS+=(--minutes "$MIN")
-IP=$(readlink -f "$(command -v ip)")
-$IP netns list | grep -qw rx || { echo "no 'rx' namespace: run  sudo scripts/netns_setup.sh rxonly  first"; exit 1; }
-scripts/start_stack.sh >/dev/null 2>&1 && echo "Dashboard: http://localhost:3000/d/pingpong-450-receiver"
-export PP_TX_HOST=${PP_TX_HOST:-abhijith-m-b@192.168.1.40} PP_TX_DIR=${PP_TX_DIR:-ins450-pingpong-test}
+if pp_has_ns rx; then :; else
+  ip -o -4 addr | grep -q "192.168.50.2/" || { echo "This PC is not set up as the receiver (no 192.168.50.2). On the GE1 PC: sudo scripts/netns_setup.sh rxonly   On the Aspire: sudo scripts/nic_role.sh receiver"; exit 1; }
+fi
+scripts/start_stack.sh >/dev/null 2>&1 && echo "Dashboard: http://localhost:3000/d/pingpong-450-receiver   (this PC = $PP_PORT)"
 [ -n "$RATE$MIN" ] && echo "Expecting: ${RATE:-any} Mbit/s, ${MIN:-any} min"
 while true; do
   rm -f .STOP data/last_run.txt
-  sudo -n "$IP" netns exec rx env PYTHONPATH="$ROOT" "$ROOT/.venv/bin/python" -m traffic.receiver "${ARGS[@]}" || { [ -e .STOP ] && break; sleep 2; continue; }
-  [ -s data/last_run.txt ] && .venv/bin/python -m traffic.finish "$(cat data/last_run.txt)"
+  pp_exec rx "$PY" -m traffic.receiver "${ARGS[@]}" || { [ -e .STOP ] && break; sleep 2; continue; }
+  [ -s data/last_run.txt ] && "$PY" -m traffic.finish "$(cat data/last_run.txt)"
   [ -n "$RATE$MIN" ] && break          # with arguments: one run, then done
   echo; echo "--- ready for the next run ---"
 done
