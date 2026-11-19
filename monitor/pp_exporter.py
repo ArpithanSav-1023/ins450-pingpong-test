@@ -20,8 +20,10 @@ FILL_PAYLOAD = 1400
 
 
 def newest_run(runs):
-    c = [d for d in glob.glob(os.path.join(runs, "*")) + glob.glob(os.path.join(runs, "*", "*")) if os.path.exists(os.path.join(d, "stats_A.json"))]
-    return max(c, key=os.path.getmtime) if c else None
+    c = [d for d in glob.glob(os.path.join(runs, "*")) + glob.glob(os.path.join(runs, "*", "*")) if os.path.exists(os.path.join(d, "stats_A.json")) or os.path.exists(os.path.join(d, "stats_B.json"))]
+    # newest = most recently written stats file (a side running on its own has only its own file)
+    mt = lambda d: max(os.path.getmtime(os.path.join(d, f)) for f in ("stats_A.json", "stats_B.json") if os.path.exists(os.path.join(d, f)))
+    return max(c, key=mt) if c else None
 
 
 def load(path):
