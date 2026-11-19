@@ -36,9 +36,10 @@ def build(role, title, uid, port, intro, labels):
                    [target(f'cbs_port_rx_util_percent{{port="{P}"}}', "in", "A"), target(f'cbs_port_tx_util_percent{{port="{P}"}}', "out", "B")],
                    pos(8, 5, 8, 6), unit="percent", ymax=110, thresholds=[(80, YELLOW), (90, RED)],
                    overrides=[color_override("in", BLUE), color_override("out", ORANGE)]),
-        timeseries(f"{PN} throughput (Mbit/s)", "Wire rate seen by the switch on this side's port.",
-                   [target(f'cbs_port_rx_bps{{port="{P}"}} / 1e6', "in", "A"), target(f'cbs_port_tx_bps{{port="{P}"}} / 1e6', "out", "B")],
-                   pos(16, 5, 8, 6), unit="Mbits", overrides=[color_override("in", BLUE), color_override("out", ORANGE)]),
+        timeseries(f"{PN} throughput: Mbit/s (MB/s in the legend)", "Wire rate seen by the switch on this side's port. 8 Mbit/s = 1 MB/s.",
+                   [target(f'cbs_port_rx_bps{{port="{P}"}} / 1e6', "in (Mbit/s)", "A"), target(f'cbs_port_tx_bps{{port="{P}"}} / 1e6', "out (Mbit/s)", "B"),
+                    target(f'cbs_port_rx_bps{{port="{P}"}} / 8e6', "in (MB/s)", "C"), target(f'cbs_port_tx_bps{{port="{P}"}} / 8e6', "out (MB/s)", "D")],
+                   pos(16, 5, 8, 6), unit="Mbits", overrides=[color_override("in.*", BLUE), color_override("out.*", ORANGE)], mbs_legend=True),
 
         row("Message counters (this side only)", 11),
         stat(sent, f'sum(pp_side_messages_sent{{{R}}})', pos(0, 12, 6, 3), color="fixed", decimals=0),

@@ -380,7 +380,7 @@ class Endpoint:
         self.mix_mbps = per
         self.fill_mbps = max(0.0, float(sc.get("target_mbps", 0)) - per)
         pool = load_pool(self.a.charts_dir)
-        print(f"[{self.role}] {self.my_ip} -> {self.peer_ip}  {sc['name']}: mix {per:.2f} + ONF dump {self.fill_mbps:.1f} = target {sc.get('target_mbps')} Mbit/s, {dur:.0f}s", flush=True)
+        print(f"[{self.role}] {self.my_ip} -> {self.peer_ip}  {sc['name']}: mix {c.rate(round(per, 2))} + ONF dump {c.rate(round(self.fill_mbps, 1))} = target {c.rate(float(sc.get('target_mbps', 0)))}, {dur:.0f}s", flush=True)
         ts = [threading.Thread(target=self.mix_receiver, daemon=True, args=(stopper,))]
         if self.role == "A":
             ts.append(threading.Thread(target=self.mix_sender, daemon=True, args=(stopper, t_send_end, t_send_start)))

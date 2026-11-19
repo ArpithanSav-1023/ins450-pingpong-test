@@ -92,7 +92,7 @@ def sheet_for(wb, title, template_ws):
 
 def summary_sheet(wb, o, ports, A):
     ws = wb.create_sheet("Loss summary")
-    ws.append([f"Run {o['scenario']}: target {o['target_mbps']} Mbit/s per direction (mix + ONF dump, wire rate)"])
+    ws.append([f"Run {o['scenario']}: target {o['target_mbps']} Mbit/s ({o['target_mbps'] / 8:.3g} MB/s) per direction (mix + ONF dump, wire rate)"])
     ws["A1"].font = Font(bold=True, size=13)
     ws.append(["message = one 450 sample; packet = any UDP datagram (mix + ONF dump); data = payload bytes. Loss comes from in-band counters; the totals use sender minus receiver."])
     ws.append([])
@@ -158,7 +158,7 @@ def build_all(runs_dir):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "All profiles"
-    hdr = ["Run", "Target Mbit/s", "Direction", "Msgs sent", "Msgs received", "Msgs lost", "Msg loss %", "Packets sent", "Packets received", "Packets lost", "Packet loss %",
+    hdr = ["Run", "Target Mbit/s (MB/s = Mbit/s / 8)", "Direction", "Msgs sent", "Msgs received", "Msgs lost", "Msg loss %", "Packets sent", "Packets received", "Packets lost", "Packet loss %",
            "Data lost (B)", "Data lost (MB)", "Data sent (MB)", "Data loss %", "ONF dump wire Mbit/s", "ONF dump MB/s", "Sender port in avg Mbit/s", "Sender port out avg Mbit/s", "Receiver port in avg Mbit/s", "Receiver port out avg Mbit/s",
            "Sender port in avg MB/s", "Receiver port out avg MB/s", "Receiver port out max util %"]
     ws.append(hdr)

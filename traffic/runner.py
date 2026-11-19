@@ -69,11 +69,11 @@ def summarize(run_dir):
 
 
 def print_summary(o):
-    print(f"\n=== {o['scenario']} (target {o['target_mbps']} Mbit/s per direction) ===")
+    print(f"\n=== {o['scenario']} (target {c.rate(o['target_mbps'])} per direction) ===")
     for d, v in o["directions"].items():
         m, p, b = v["messages"], v["packets"], v["data"]
         print(f"{d}:  messages {m['sent']} sent / {m['recv']} recv / {m['lost']} lost ({m['loss_pct']:.3f}%), bad {m['bad']}, wrong DSCP {m['wrong_dscp']}\n"
-              f"          packets  {p['sent']} sent / {p['recv']} recv / {p['lost']} lost ({p['loss_pct']:.3f}%)   ONF dump achieved (wire) {v['filler']['achieved_mbps']} Mbit/s\n"
+              f"          packets  {p['sent']} sent / {p['recv']} recv / {p['lost']} lost ({p['loss_pct']:.3f}%)   ONF dump achieved (wire) {c.rate(v['filler']['achieved_mbps'])}\n"
               f"          data     {b['sent_bytes']} B sent / {b['recv_bytes']} B recv / {b['lost_bytes']} B lost ({b['loss_pct']:.3f}%)")
 
 

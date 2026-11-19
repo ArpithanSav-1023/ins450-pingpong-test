@@ -593,8 +593,8 @@
   {
    "id": 10,
    "type": "timeseries",
-   "title": "${port} throughput (Mbit/s)",
-   "description": "Wire rate seen by the switch on this side's port.",
+   "title": "${port} throughput: Mbit/s (MB/s in the legend)",
+   "description": "Wire rate seen by the switch on this side's port. 8 Mbit/s = 1 MB/s.",
    "datasource": {
     "type": "prometheus",
     "uid": "prom"
@@ -612,7 +612,7 @@
       "uid": "prom"
      },
      "expr": "cbs_port_rx_bps{port=\"$port\"} / 1e6",
-     "legendFormat": "in",
+     "legendFormat": "in (Mbit/s)",
      "refId": "A"
     },
     {
@@ -621,8 +621,26 @@
       "uid": "prom"
      },
      "expr": "cbs_port_tx_bps{port=\"$port\"} / 1e6",
-     "legendFormat": "out",
+     "legendFormat": "out (Mbit/s)",
      "refId": "B"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "cbs_port_rx_bps{port=\"$port\"} / 8e6",
+     "legendFormat": "in (MB/s)",
+     "refId": "C"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "cbs_port_tx_bps{port=\"$port\"} / 8e6",
+     "legendFormat": "out (MB/s)",
+     "refId": "D"
     }
    ],
    "fieldConfig": {
@@ -646,7 +664,7 @@
      {
       "matcher": {
        "id": "byRegexp",
-       "options": "in"
+       "options": "in.*"
       },
       "properties": [
        {
@@ -661,7 +679,7 @@
      {
       "matcher": {
        "id": "byRegexp",
-       "options": "out"
+       "options": "out.*"
       },
       "properties": [
        {
@@ -672,14 +690,54 @@
         }
        }
       ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": ".*MB/s.*"
+      },
+      "properties": [
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "viz": true,
+         "legend": false,
+         "tooltip": false
+        }
+       },
+       {
+        "id": "unit",
+        "value": "suffix: MB/s"
+       },
+       {
+        "id": "decimals",
+        "value": 2
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": ".*Mbit/s.*"
+      },
+      "properties": [
+       {
+        "id": "decimals",
+        "value": 1
+       }
+      ]
      }
     ]
    },
    "options": {
     "legend": {
-     "displayMode": "list",
+     "displayMode": "table",
      "placement": "bottom",
-     "showLegend": true
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
     },
     "tooltip": {
      "mode": "multi",

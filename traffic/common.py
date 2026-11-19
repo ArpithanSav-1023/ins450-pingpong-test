@@ -21,6 +21,11 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STOP_FILE = os.environ.get("SNMP_DEMO_STOP_FILE", os.path.join(PROJECT_ROOT, ".STOP"))
 MAX_DURATION_S = 3600
 
+
+def rate(mbit):
+    """'50 Mbit/s (6.25 MB/s)': every place that shows a rate shows megabytes per second too (1 MB/s = 8 Mbit/s)."""
+    return f"{mbit:g} Mbit/s ({mbit / 8:.3g} MB/s)"
+
 # DSCP code points (decimal). IP TOS byte = DSCP << 2.
 DSCP = {"CS0": 0, "CS1": 8, "CS2": 16, "CS3": 24, "CS4": 32, "AF11": 10, "AF21": 18, "AF31": 26, "AF41": 34, "CS5": 40, "EF": 46, "CS6": 48}
 

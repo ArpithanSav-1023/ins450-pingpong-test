@@ -7,7 +7,7 @@
 # Dashboard: http://localhost:3000/d/pingpong-450-sender  (pick this PC's switch port in the "Switch port" box at the top)
 source "$(dirname "$0")/_pp_env.sh"
 RATE=${1:-}; MIN=${2:-}
-[ -n "$RATE" ] || read -rp "Load per direction in Mbit/s (e.g. 25 50 75 95): " RATE
+[ -n "$RATE" ] || read -rp "Load per direction in Mbit/s (e.g. 25 50 75 95; 8 Mbit/s = 1 MB/s): " RATE
 [ -n "$MIN" ] || read -rp "Duration in minutes (e.g. 10): " MIN
 if pp_has_ns tx; then :; else
   ip -o -4 addr | grep -q "192.168.50.1/" || { echo "This PC is not set up as the sender (no 192.168.50.1). On the GE1 PC: sudo scripts/netns_setup.sh txonly   On the Aspire: sudo scripts/nic_role.sh sender"; exit 1; }

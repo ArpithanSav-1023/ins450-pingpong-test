@@ -37,7 +37,7 @@ def main():
         sys.exit("REFUSING: target above 250 Mbit/s")
     speed, nic = nic_speed_mbps()
     if speed and a.rate > 0.97 * speed:
-        sys.exit(f"{a.rate:g} Mbit/s does not fit through {nic} ({speed} Mbit/s link, about {0.97 * speed:.0f} possible). Lower the rate.")
+        sys.exit(f"{c.rate(a.rate)} does not fit through {nic} ({c.rate(speed)} link, about {c.rate(round(0.97 * speed))} possible). Lower the rate.")
     sc = json.load(open(a.base))
     tag = f"{a.rate:g}".replace(".", "p")
     mine = os.environ.get("PP_PORT", "GE9")                 # the switch port THIS (sending) PC is on
@@ -49,7 +49,7 @@ def main():
     run_dir = os.path.join(ROOT, "runs", run)
     os.makedirs(run_dir)
     json.dump(sc, open(os.path.join(run_dir, "scenario.json"), "w"), indent=1)
-    print(f"[sender] {a.rate:g} Mbit/s for {mins} -> runs/{run}", flush=True)
+    print(f"[sender] {c.rate(a.rate)} for {mins} -> runs/{run}", flush=True)
     rc = subprocess.run([sys.executable, "-m", "traffic.pp", "--scenario", os.path.join(run_dir, "scenario.json"), "--role", "A", "--run-dir", run_dir,
                          "--duration", str(secs), "--start-in", "8", "--announce"], cwd=ROOT, env={**os.environ, "PYTHONPATH": ROOT}).returncode
     try:

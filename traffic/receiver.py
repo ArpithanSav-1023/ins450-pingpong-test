@@ -48,7 +48,7 @@ def main():
             continue
         bad = []
         if a.rate is not None and abs(float(sc.get("target_mbps", -1)) - a.rate) > 1e-9:
-            bad.append(f"load {sc.get('target_mbps'):g} Mbit/s (you typed {a.rate:g})")
+            bad.append(f"load {c.rate(float(sc.get('target_mbps')))} (you typed {c.rate(a.rate)})")
         if a.minutes is not None and abs(dur / 60 - a.minutes) > 0.01:
             bad.append(f"length {dur / 60:g} min (you typed {a.minutes:g})")
         if bad:
@@ -62,7 +62,7 @@ def main():
     run_dir = os.path.join(a.runs_dir or os.path.join(ROOT, "runs", "sender_" + sc.get("a_port", "GE9")), run)
     os.makedirs(run_dir, exist_ok=True)
     json.dump(sc, open(os.path.join(run_dir, "scenario.json"), "w"), indent=1)
-    print(f"[receiver] HELLO from {src[0]}: {sc['name']}, {dur:.0f} s, target {sc.get('target_mbps')} Mbit/s -> {run_dir}  (starting in {n:.0f} s)", flush=True)
+    print(f"[receiver] HELLO from {src[0]}: {sc['name']}, {dur:.0f} s, target {c.rate(float(sc.get('target_mbps', 0)))} -> {run_dir}  (starting in {n:.0f} s)", flush=True)
     rc = subprocess.run([sys.executable, "-m", "traffic.pp", "--scenario", os.path.join(run_dir, "scenario.json"), "--role", "B", "--run-dir", run_dir,
                          "--duration", str(dur), "--start-at", str(t_rx + n - 0.001)], cwd=ROOT, env={**os.environ, "PYTHONPATH": ROOT}).returncode
     try:
