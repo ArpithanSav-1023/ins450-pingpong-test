@@ -1,5 +1,8 @@
 # What was done: the IEC 61162-450 ping-pong test and the switch QoS setup
 
+> **Units:** everywhere a rate is shown in Mbit/s, MB/s is given too (8 Mbit/s = 1 MB/s). 25 Mbit/s (3.1 MB/s), 50 (6.25), 75 (9.4), 95 (11.9), 100 (12.5), 150 (18.75), 200 (25 MB/s).
+
+
 A beginner-friendly write-up of everything built and changed, in plain language.
 Project folder: `/home/sav1023/Code/net/test`  ·  Written 2026-11-19
 

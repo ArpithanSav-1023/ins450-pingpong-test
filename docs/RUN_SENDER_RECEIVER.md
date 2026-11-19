@@ -1,5 +1,8 @@
 # Running the test: sender PC + receiver PC
 
+> **Units:** everywhere a rate is shown in Mbit/s, MB/s is given too (8 Mbit/s = 1 MB/s). 25 Mbit/s (3.1 MB/s), 50 (6.25), 75 (9.4), 95 (11.9), 100 (12.5), 150 (18.75), 200 (25 MB/s).
+
+
 Two PCs, each runs ONE script. You choose the load and the length on the **sender** only.
 
 | PC | Role | Switch port | Script | Dashboard |

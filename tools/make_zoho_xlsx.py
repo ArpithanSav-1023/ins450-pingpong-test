@@ -21,8 +21,8 @@ _d = next(iter(runs[0][2]["directions"])).split("->")
 ws.append([f"IEC 61162-450 ping-pong test: results per profile ({_d[0]} sends from a separate PC, {_d[1]} echoes; 10 min each; marked traffic; sender link = 100 Mbps)"])
 ws["A1"].font = Font(bold=True, size=13)
 ws.append(["Mbps = Mbit per second, MB = megabyte (1 MB = 1,000,000 bytes, 1 MB/s = 8 Mbps), all per direction (mix + ONF dump, wire rate). Message = one 450 sample; packet = any UDP datagram; data = payload bytes."])
-hdr = ["Profile (Mbps per direction)", "Messages sent", "Messages received", "Messages lost", "Message loss %", "Packets sent", "Packets received", "Packets lost", "Packet loss %",
-       "Data loss %", "ONF dump wire Mbps", "Sender port in avg Mbps", "Receiver port out avg Mbps", "Receiver port out max util %",
+hdr = ["Profile (Mbps per direction, MB/s in brackets)", "Messages sent", "Messages received", "Messages lost", "Message loss %", "Packets sent", "Packets received", "Packets lost", "Packet loss %",
+       "Data loss %", "ONF dump wire Mbps (MB/s in column S)", "Sender port in avg Mbps", "Receiver port out avg Mbps", "Receiver port out max util %",
        "Data sent (MB)", "Data received (MB)", "Data lost (MB)", "Mix payload sent (MB)", "ONF dump MB/s", "Sender port in avg MB/s", "Receiver port out avg MB/s"]
 ws.append(hdr)
 for r, (t, d, o) in enumerate(runs):
@@ -32,7 +32,7 @@ for r, (t, d, o) in enumerate(runs):
     pt = o.get("ports") or {}
     pv = list(pt.values()) + [{}] * 4
     g = lambda i, x: pv[i].get(x, 0)
-    ws.append([t, m["sent"], m["recv"], m["lost"], round(m["loss_pct"], 3), p["sent"], p["recv"], p["lost"], round(p["loss_pct"], 3), round(b["loss_pct"], 3),
+    ws.append([f"{t:g} Mbps ({t / 8:.3g} MB/s)", m["sent"], m["recv"], m["lost"], round(m["loss_pct"], 3), p["sent"], p["recv"], p["lost"], round(p["loss_pct"], 3), round(b["loss_pct"], 3),
                v["filler"]["achieved_mbps"], round(g(0, "mbps_avg"), 1), round(g(3, "mbps_avg"), 1), round(g(3, "util_max"), 1),
                mb(b["sent_bytes"]), mb(b["recv_bytes"]), mb(b["lost_bytes"]), mb(m["sent_bytes"]), round(v["filler"]["achieved_mbps"] / 8, 3),
                round(g(0, "mbps_avg") / 8, 3), round(g(3, "mbps_avg") / 8, 3)])
@@ -59,7 +59,7 @@ for t, d, o in runs:
         rows[k]["loss"][t] = round(100 * (s - rc) / s, 1) if s else 0
 sc0 = json.load(open(os.path.join(runs[0][1], "scenario.json")))
 info = {g["name"]: (g["addr"], f"CS{g['cos']}") for g in sc0["groups"]}
-ws.append(["Group", "Multicast address", "CoS (DSCP class)"] + [f"{t} Mbps lost %" for t, _, _ in runs] + ["Messages sent (per run)", "Payload sent (MB per run)"])
+ws.append(["Group", "Multicast address", "CoS (DSCP class)"] + [f"{t:g} Mbps ({t / 8:.3g} MB/s) lost %" for t, _, _ in runs] + ["Messages sent (per run)", "Payload sent (MB per run)"])
 for c in ws[ws.max_row]:
     c.font, c.fill, c.alignment = Font(bold=True), HEAD, Alignment(wrap_text=True, vertical="top")
 ws.row_dimensions[ws.max_row].height = 32

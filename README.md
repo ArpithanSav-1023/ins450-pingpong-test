@@ -1,5 +1,8 @@
 # IEC 61162-450 ping-pong test (CBS350, GE1 <-> GE9)
 
+> **Units:** everywhere a rate is shown in Mbit/s, MB/s is given too (8 Mbit/s = 1 MB/s). 25 Mbit/s (3.1 MB/s), 50 (6.25), 75 (9.4), 95 (11.9), 100 (12.5), 150 (18.75), 200 (25 MB/s).
+
+
 GE1 host sends the 450 sample mix on every multicast group, the GE9 host echoes every datagram back on the same group, repeat for 10 minutes.
 Chart data is added as paced UDP filler in both directions so each run offers 25 / 50 / 75 / 100 / 150 / 200 Mbit/s per direction.
 Grafana shows port utilisation, message counters (each side), packet / message / data loss and lost-message counts.
