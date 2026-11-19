@@ -37,7 +37,9 @@ def pull(host, remote_run, run_dir):
 def summarize(run_dir):
     A = json.load(open(os.path.join(run_dir, "stats_A.json")))
     B = json.load(open(os.path.join(run_dir, "stats_B.json")))
-    dirs = {"GE1->GE9": (A, B), "GE9->GE1": (B, A)}   # (sender, receiver)
+    scn = json.load(open(os.path.join(run_dir, "scenario.json")))
+    pa, pb = scn.get("a_port", "GE1"), scn.get("b_port", "GE9")
+    dirs = {f"{pa}->{pb}": (A, B), f"{pb}->{pa}": (B, A)}   # (sender, receiver)
     out = {"scenario": A["scenario"], "target_mbps": A["target_mbps"], "directions": {}}
     rows = []
     for d, (s, r) in dirs.items():
@@ -116,23 +118,20 @@ def main():
         if r.returncode != 0:
             sys.exit(f"remote project folder missing ({a.tx_dir}): run scripts/sync_sender.sh {remote}")
         subprocess.run(["scp", *SSH_OPTS, os.path.join(run_dir, "scenario.json"), f"{remote}:{remote_run}/scenario.json"], capture_output=True, check=True)
-        offs = []
-        for _ in range(5):
-            t0 = time.time(); rt = ssh(remote, "date +%s.%N").stdout.strip(); t1 = time.time()
-            offs.append((float(rt) - (t0 + t1) / 2, t1 - t0))
-        offset = min(offs, key=lambda x: x[1])[0]     # sample with the shortest round trip is the most accurate
-        print(f"[runner] sender PC {remote}: clock offset {offset * 1000:+.1f} ms (compensated)", flush=True)
-        if abs(offset) > 1.0:
-            print("[runner] WARNING: clocks differ by more than 1 s: install chrony on both PCs so Prometheus windows line up", flush=True)
+        g = ssh(remote, f"git -C {a.tx_dir} pull -q 2>&1 | tail -1")
+        if g.stdout.strip():
+            print("[runner] git pull on the sender PC:", g.stdout.strip(), flush=True)
+        subprocess.run(["scp", *SSH_OPTS, os.path.join(run_dir, "scenario.json"), f"{remote}:{remote_run}/scenario.json"], capture_output=True)
 
     start_at = time.time() + (a.lead if a.manual_sender else 6.0 if remote else 4.0)      # receivers (joins, ARP, IGMP) settle before anyone sends
 
     def launch(role, ns):
-        if remote and role == "A":
-            rc = f"cd {a.tx_dir} && PYTHONPATH=. python3 -m traffic.pp --scenario {remote_run}/scenario.json --role A --run-dir {remote_run} --duration {dur} --start-at {start_at + offset}"
+        if remote and role == "A":     # detached on the sender PC (survives a dropped ssh/Wi-Fi), relative start: no clock sync needed
+            rc = (f"cd {a.tx_dir} && PYTHONPATH=. nohup setsid python3 -m traffic.pp --scenario {remote_run}/scenario.json --role A --run-dir {remote_run} "
+                  f"--duration {dur} --start-in 8 > {remote_run}/stdout.log 2>&1 < /dev/null &")
             return subprocess.Popen(["ssh", *SSH_OPTS, remote, rc])
         cmd = [sys.executable, "-m", "traffic.pp", "--scenario", os.path.join(run_dir, "scenario.json"), "--role", role, "--run-dir", run_dir, "--duration", str(dur)]
-        cmd += ["--arm", "--arm-timeout", str(a.arm_timeout)] if (a.manual_sender and role == "B") else ["--start-at", str(start_at)]
+        cmd += ["--arm", "--arm-timeout", str(a.arm_timeout)] if ((a.manual_sender or remote) and role == "B") else ["--start-at", str(start_at)]
         if a.local:
             cmd.append("--local")
         else:
@@ -140,7 +139,7 @@ def main():
         return subprocess.Popen(cmd, cwd=ROOT, env={**os.environ, "PYTHONPATH": ROOT})
 
     pb = launch("B", sc.get("rx_netns", "rx"))
-    time.sleep(0.5)
+    time.sleep(3.0 if remote else 0.5)      # B must be armed (listening for the HELLO) before A starts
     if a.manual_sender:
         name = os.path.basename(run_dir)
         print(f"\n[runner] MANUAL SENDER. Receiver is armed (waits up to {a.arm_timeout:.0f} s). Paste this on the sender PC; both ends start 8 s after you press Enter (no clock sync needed):\n\n"
@@ -187,7 +186,14 @@ def main():
     if remote:
         sync_stop.set()
         time.sleep(0.5)
-        pull(remote, remote_run, run_dir)
+        for _ in range(90):           # the sender finished with B; wait (up to 15 min) for its final stats, e.g. across a Wi-Fi drop
+            pull(remote, remote_run, run_dir)
+            try:
+                if json.load(open(os.path.join(run_dir, "stats_A.json"))).get("final"):
+                    break
+            except (OSError, ValueError):
+                pass
+            time.sleep(10)
     stopped = os.path.exists(c.STOP_FILE)
     if stopped:
         os.remove(c.STOP_FILE)

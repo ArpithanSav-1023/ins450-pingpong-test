@@ -30,11 +30,12 @@ def mb(n):
     return round(n / 1e6, 3)
 
 
-def port_stats(t0, t1):
+def port_stats(t0, t1, a="GE1", b="GE9"):
     """Average / max Mbit/s and utilisation % per switch port and direction over [t0, t1] from Prometheus (None if unreachable)."""
     out = {}
-    for label, metric, port in [("GE1 in (GE1 sends)", "rx", "gi1"), ("GE1 out (GE1 receives)", "tx", "gi1"),
-                                ("GE9 in (GE9 sends)", "rx", "gi9"), ("GE9 out (GE9 receives)", "tx", "gi9")]:
+    gi = lambda n: "gi" + n[2:]          # "GE9" -> "gi9"
+    for label, metric, port in [(f"{a} in ({a} sends)", "rx", gi(a)), (f"{a} out ({a} receives)", "tx", gi(a)),
+                                (f"{b} in ({b} sends)", "rx", gi(b)), (f"{b} out ({b} receives)", "tx", gi(b))]:
         row = {}
         for key, q in [("mbps", f'cbs_port_{metric}_bps{{port="{port}"}}/1e6'), ("util", f'cbs_port_{metric}_util_percent{{port="{port}"}}')]:
             url = f"{PROM}/api/v1/query_range?" + urllib.parse.urlencode({"query": q, "start": t0, "end": t1, "step": 5})
@@ -131,18 +132,20 @@ def build(run_dir):
     B = json.load(open(os.path.join(run_dir, "stats_B.json")))
     summ = json.load(open(os.path.join(run_dir, "summary.json")))
     hz = json.load(open(os.path.join(run_dir, "scenario.json"))).get("mix_hz", 10)
-    ports = port_stats(A["start"], A["start"] + (A.get("sent_secs") or A.get("duration_s") or 0) + 6)
+    scn = json.load(open(os.path.join(run_dir, "scenario.json")))
+    pa, pb = scn.get("a_port", "GE1"), scn.get("b_port", "GE9")
+    ports = port_stats(A["start"], A["start"] + (A.get("sent_secs") or A.get("duration_s") or 0) + 6, pa, pb)
     ports = ports or summ.get("ports")      # keep earlier port stats if Prometheus is down now
     summ["ports"] = ports
     json.dump(summ, open(os.path.join(run_dir, "summary.json"), "w"), indent=1)
     wb = openpyxl.load_workbook(TEMPLATE)
     ws1 = wb[SHEET]
-    ws2 = sheet_for(wb, "Echo GE9 to GE1", ws1)
+    ws2 = sheet_for(wb, f"Echo {pb} to {pa}", ws1)
     fill_sheet(ws1, A["tx"], B["rx"], hz)
     fill_sheet(ws2, B["tx"], A["rx"], hz)
     fill_onf(ws1, A["filler"], B["filler"])
     fill_onf(ws2, B["filler"], A["filler"])
-    ws1["A4"], ws2["A4"] = "GE1 sends -> GE9 receives", "GE9 echoes -> GE1 receives (reply path)"
+    ws1["A4"], ws2["A4"] = f"{pa} sends -> {pb} receives", f"{pb} echoes -> {pa} receives (reply path)"
     ws1["A10"], ws2["A10"] = "Direction (counts taken at the receiving port)", "Direction (counts taken at the receiving port)"
     summary_sheet(wb, summ, ports, A)
     wb.move_sheet("Dropdown options", offset=len(wb.sheetnames))   # keep the dropdown list sheet last
@@ -156,8 +159,8 @@ def build_all(runs_dir):
     ws = wb.active
     ws.title = "All profiles"
     hdr = ["Run", "Target Mbit/s", "Direction", "Msgs sent", "Msgs received", "Msgs lost", "Msg loss %", "Packets sent", "Packets received", "Packets lost", "Packet loss %",
-           "Data lost (B)", "Data lost (MB)", "Data sent (MB)", "Data loss %", "ONF dump wire Mbit/s", "ONF dump MB/s", "GE1 in avg Mbit/s", "GE1 out avg Mbit/s", "GE9 in avg Mbit/s", "GE9 out avg Mbit/s",
-           "GE1 in avg MB/s", "GE9 out avg MB/s", "GE9 out max util %"]
+           "Data lost (B)", "Data lost (MB)", "Data sent (MB)", "Data loss %", "ONF dump wire Mbit/s", "ONF dump MB/s", "Sender port in avg Mbit/s", "Sender port out avg Mbit/s", "Receiver port in avg Mbit/s", "Receiver port out avg Mbit/s",
+           "Sender port in avg MB/s", "Receiver port out avg MB/s", "Receiver port out max util %"]
     ws.append(hdr)
     for c in ws[1]:
         c.font, c.fill = Font(bold=True), HEAD
@@ -165,14 +168,15 @@ def build_all(runs_dir):
     for f in sorted(glob.glob(os.path.join(runs_dir, "*", "summary.json")), key=lambda p: json.load(open(p)).get("target_mbps", 0)):
         o = json.load(open(f))
         p = o.get("ports") or {}
-        g = lambda k, x: round((p.get(k) or {}).get(x, 0), 2)
+        pv = list(p.values()) + [{}] * 4
+        g = lambda i, x: round(pv[i].get(x, 0), 2)       # i: 0 sender in, 1 sender out, 2 receiver in, 3 receiver out
         for d, v in o["directions"].items():
             m, pk, b = v["messages"], v["packets"], v["data"]
             ws.append([os.path.basename(os.path.dirname(f)), o["target_mbps"], d, m["sent"], m["recv"], m["lost"], round(m["loss_pct"], 4), pk["sent"], pk["recv"], pk["lost"],
                        round(pk["loss_pct"], 4), b["lost_bytes"], mb(b["lost_bytes"]), mb(b["sent_bytes"]), round(b["loss_pct"], 4), v["filler"]["achieved_mbps"],
-                       round(v["filler"]["achieved_mbps"] / 8, 3), g("GE1 in (GE1 sends)", "mbps_avg"), g("GE1 out (GE1 receives)", "mbps_avg"), g("GE9 in (GE9 sends)", "mbps_avg"),
-                       g("GE9 out (GE9 receives)", "mbps_avg"), round(g("GE1 in (GE1 sends)", "mbps_avg") / 8, 3), round(g("GE9 out (GE9 receives)", "mbps_avg") / 8, 3),
-                       g("GE9 out (GE9 receives)", "util_max")])
+                       round(v["filler"]["achieved_mbps"] / 8, 3), g(0, "mbps_avg"), g(1, "mbps_avg"), g(2, "mbps_avg"),
+                       g(3, "mbps_avg"), round(g(0, "mbps_avg") / 8, 3), round(g(3, "mbps_avg") / 8, 3),
+                       g(3, "util_max")])
     ws.column_dimensions["A"].width = 34
     ws.row_dimensions[1].height = 45
     ws.freeze_panes = "A2"
