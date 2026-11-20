@@ -17,4 +17,5 @@ nmcli -t -f NAME connection show | grep -qx pp-test || nmcli connection add type
 nmcli connection up pp-test || true
 sysctl -w "net.ipv4.conf.$NIC.rp_filter=0" >/dev/null || true
 sudo -u "$U" bash -c "cd '$ROOT' && python3 -m venv .venv && .venv/bin/pip install -q prometheus_client==0.26.0 openpyxl"
+[ -f "$ROOT/scripts/install_sudoless.sh" ] && "$ROOT/scripts/install_sudoless.sh" || true     # password-less nic_role.sh from now on
 echo; echo "Done. LOG OUT AND IN AGAIN (or run: newgrp docker) so docker works without sudo, then:  scripts/sender.sh 50 10"

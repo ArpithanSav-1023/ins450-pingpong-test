@@ -2,7 +2,10 @@
 # ANY PC whose test NIC is a dedicated card (the Aspire, the new test PC): make its test NIC the sender (192.168.50.1) or the receiver (192.168.50.2). Run with sudo, between runs:
 #     sudo scripts/nic_role.sh sender        |        sudo scripts/nic_role.sh receiver
 # Also keeps 192.168.1.15 on the NIC (+ a route to the switch only) so the SNMP poller can read the switch.
-[ "$(id -u)" = 0 ] || { echo "run with sudo"; exit 1; }
+if [ "$(id -u)" != 0 ]; then      # no sudo needed once  sudo scripts/install_sudoless.sh  has been run on this PC
+  [ -x /usr/local/sbin/pp-nic-role ] && exec sudo -n /usr/local/sbin/pp-nic-role "$@"
+  echo "run with sudo (or install the password-less rule once: sudo scripts/install_sudoless.sh)"; exit 1
+fi
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 [ -f "$ROOT/data/pp_local.env" ] && . "$ROOT/data/pp_local.env"     # NIC=..., EXTRA=... (extra address for reaching the switch; EXTRA="" = none)
 NIC=${NIC:-enx207bd51e1472}; EXTRA=${EXTRA-192.168.1.15}
