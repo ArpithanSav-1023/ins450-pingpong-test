@@ -2,7 +2,7 @@
 # Starts the monitoring stack: SNMP poller (:9101), ping-pong exporter (:9103), Prometheus (:9090), Grafana (:3000, localhost only).
 # Safe to run repeatedly (skips what is already running). Stop with scripts/stop_stack.sh.
 cd "$(cd "$(dirname "$0")/.." && pwd)" || exit 1
-mkdir -p data
+mkdir -p data runs      # create them as YOU: docker would create a missing runs/ as root
 up() { ss -ltn 2>/dev/null | grep -q ":$1 "; }
 if up 9101; then echo "poller already running (:9101)"; else
   nohup .venv/bin/python monitor/poller.py --interval 5 --db data/exp_a.sqlite >> data/poller.log 2>&1 & echo "poller started"; fi
