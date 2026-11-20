@@ -5,3 +5,5 @@ data/
 .STOP
 samples/charts/
 *.pyc
+bin/
+native/ppstream/target/

@@ -29,6 +29,7 @@ import re
 import selectors
 import socket
 import struct
+import subprocess
 import multiprocessing as mp
 import threading
 import time
@@ -40,6 +41,18 @@ from . import sender450 as s450
 
 FILL_PORT = 20100            # CCRS JSON port from the sheet: the ONF dump (no 450 header) is the load filler
 FILL_PAYLOAD = 1400          # UDP payload bytes of one filler packet (wire = +46: Eth+FCS 18, IP 20, UDP 8)
+# native stream program (native/ppstream, Rust): moves the bulk streams with recvmmsg/sendmmsg at a few percent CPU. Used when present (PP_NATIVE=path, or
+# bin/ppstream, or native/ppstream/target/release/ppstream); PP_NATIVE=0 forces the Python streams.
+def native_binary():
+    env = os.environ.get("PP_NATIVE")
+    if env == "0":
+        return None
+    for p in ([env] if env else []) + [os.path.join(c.PROJECT_ROOT, "bin", "ppstream"), os.path.join(c.PROJECT_ROOT, "native", "ppstream", "target", "release", "ppstream")]:
+        if p and os.path.isfile(p) and os.access(p, os.X_OK):
+            return p
+    return None
+
+
 FILL_MAGIC = b"FLL"           # stream packet header: FILL_MAGIC + flow id (1 byte), per-flow sequence number, pool offset
 FILL_HDR = struct.Struct(">4sQI")   # magic, seq, pool offset
 WIRE_OVERHEAD = 46
@@ -236,6 +249,7 @@ class Endpoint:
         # unicast UDP streams that carry the bulk load (chart/database data): [{name, port, cos, mbps}]. Default: one "ONF" stream whose rate is target - mix.
         self.streams = [dict(x) for x in sc.get("streams")] if sc.get("streams") else [{"name": "ONF", "port": FILL_PORT, "cos": 1, "mbps": None}]
         # per stream: tx_pkts (sender) and one counter set per RECEIVER PROCESS (rx_procs processes share the port with SO_REUSEPORT, flows spread by source port)
+        self.nat = {}                  # stream name -> {"rx": stats json path, "tx": stats json path or None} when the native program carries that stream
         self.sv = {x["name"]: {"tx_pkts": ctx.Value("q", 0, lock=False),
                                "rx": [{k: ctx.Value("q", 0, lock=False) for k in ("rx_pkts", "rx_bytes", "rx_lost")} for _ in range(int(x.get("rx_procs", 1)))]}
                    for x in self.streams}
@@ -498,18 +512,56 @@ class Endpoint:
                 v["rx_pkts"].value, v["rx_bytes"].value, v["rx_lost"].value = pk, by, lost
         v["rx_pkts"].value, v["rx_bytes"].value, v["rx_lost"].value = pk, by, lost
 
+    # ---- native streams
+    @staticmethod
+    def _read_json(path):
+        try:
+            return json.load(open(path))
+        except (OSError, ValueError, TypeError):
+            return {}
+
+    def stream_counts(self, name):
+        """(tx_pkts, rx_pkts, rx_bytes, rx_lost) of one stream, from the native program's json files or from the Python counters."""
+        n = self.nat.get(name)
+        if n:
+            t, r = self._read_json(n["tx"]) if n.get("tx") else {}, self._read_json(n["rx"])
+            return t.get("tx_pkts", 0), r.get("rx_pkts", 0), r.get("rx_bytes", 0), r.get("rx_lost", 0)
+        v = self.sv[name]
+        return v["tx_pkts"].value, sum(r["rx_pkts"].value for r in v["rx"]), sum(r["rx_bytes"].value for r in v["rx"]), sum(r["rx_lost"].value for r in v["rx"])
+
+    def start_native(self, binary, pool, lead, dur, drain):
+        """Starts one native receiver per stream (and one native sender per stream when this side sends). Returns the processes."""
+        pool_path = os.path.join(c.PROJECT_ROOT, "data", "pool.bin")
+        os.makedirs(os.path.dirname(pool_path), exist_ok=True)
+        with open(pool_path, "wb") as f:
+            f.write(pool)
+        procs, vary = [], self.vary
+        for st in self.streams:
+            nm = st["name"]
+            rx_json, tx_json = os.path.join(self.a.run_dir, f"native_{self.role}_{nm}_rx.json"), os.path.join(self.a.run_dir, f"native_{self.role}_{nm}_tx.json")
+            self.nat[nm] = {"rx": rx_json, "tx": None}
+            procs.append(subprocess.Popen([binary, "recv", "--ip", self.my_ip, "--port", str(st["port"]), "--run-for", f"{lead + dur + drain - 0.5:.1f}", "--stats", rx_json,
+                                           "--stop-file", c.STOP_FILE], stderr=subprocess.PIPE))
+            if self.echo or self.role == "A":
+                self.nat[nm]["tx"] = tx_json
+                cos = 0 if self.sc.get("marking") == "none" else int(st.get("cos", 1))
+                procs.append(subprocess.Popen([binary, "send", "--my-ip", self.my_ip, "--peer-ip", self.peer_ip, "--port", str(st["port"]), "--mbps", str(st["mbps"]), "--cos", str(cos),
+                                               "--pool", pool_path, "--start-in", f"{lead:.3f}", "--duration", f"{dur:.3f}", "--flows", str(int(st.get("flows", 1))),
+                                               "--vary-min", str(vary.get("streams", 1.0)), "--vary-step", str(vary.get("step_s", 2.0)), "--stats", tx_json,
+                                               "--stop-file", c.STOP_FILE], stderr=subprocess.PIPE))
+        return procs
+
     # ---- stats
     def snapshot(self, final=False):
+        sc_ = {x["name"]: self.stream_counts(x["name"]) for x in self.streams}
         with self.lock:
             return {"role": self.role, "ts": time.time(), "start": self.t_start, "final": final,
                     "scenario": self.sc["name"], "target_mbps": self.sc.get("target_mbps", 0), "filler_mbps": round(self.fill_mbps, 2), "duration_s": getattr(self, "duration_s", 0), "sent_secs": round(self.sent_secs(), 2),
                     "tx": {k: dict(v) for k, v in self.tx.items()}, "rx": {k: dict(v) for k, v in self.rx.items()},
-                    "filler": {"tx_pkts": sum(v["tx_pkts"].value for v in self.sv.values()), "tx_bytes": sum(v["tx_pkts"].value for v in self.sv.values()) * FILL_PAYLOAD,
-                               "rx_pkts": sum(r["rx_pkts"].value for v in self.sv.values() for r in v["rx"]), "rx_bytes": sum(r["rx_bytes"].value for v in self.sv.values() for r in v["rx"]),
-                               "rx_lost": sum(r["rx_lost"].value for v in self.sv.values() for r in v["rx"])},
-                    "streams": {x["name"]: {"port": x["port"], "mbps": round(float(x["mbps"] or 0), 3), "tx_pkts": self.sv[x["name"]]["tx_pkts"].value,
-                                            "tx_bytes": self.sv[x["name"]]["tx_pkts"].value * FILL_PAYLOAD, "rx_pkts": sum(r["rx_pkts"].value for r in self.sv[x["name"]]["rx"]),
-                                            "rx_bytes": sum(r["rx_bytes"].value for r in self.sv[x["name"]]["rx"]), "rx_lost": sum(r["rx_lost"].value for r in self.sv[x["name"]]["rx"])} for x in self.streams}}
+                    "filler": {"tx_pkts": sum(c_[0] for c_ in sc_.values()), "tx_bytes": sum(c_[0] for c_ in sc_.values()) * FILL_PAYLOAD,
+                               "rx_pkts": sum(c_[1] for c_ in sc_.values()), "rx_bytes": sum(c_[2] for c_ in sc_.values()), "rx_lost": sum(c_[3] for c_ in sc_.values())},
+                    "streams": {x["name"]: {"port": x["port"], "mbps": round(float(x["mbps"] or 0), 3), "tx_pkts": sc_[x["name"]][0], "tx_bytes": sc_[x["name"]][0] * FILL_PAYLOAD,
+                                            "rx_pkts": sc_[x["name"]][1], "rx_bytes": sc_[x["name"]][2], "rx_lost": sc_[x["name"]][3]} for x in self.streams}}
 
     def sent_secs(self):
         """Seconds the senders have actually been sending (a run stopped early reports its real length)."""
@@ -570,11 +622,16 @@ class Endpoint:
             if self.rad:
                 ts.append(threading.Thread(target=self.radar_sender, daemon=True, args=(stopper, t_send_end, t_send_start)))
         # filler runs in separate processes: Python threads share one GIL and cannot do 200 Mbit/s of packets plus the mix
-        for st in self.streams:
-            for k in range(int(st.get("rx_procs", 1))):
-                ts.append(self.ctx.Process(target=self.fill_receiver, daemon=True, args=(stopper, st, k)))
-            if self.echo or self.role == "A":          # without echo only the sender sends the streams
-                ts.append(self.ctx.Process(target=self.fill_sender, daemon=True, args=(stopper, t_send_end, pool, t_send_start, st)))
+        binary, nprocs = native_binary(), []
+        if binary:                                      # the bulk streams in the native program (see native_binary)
+            nprocs = self.start_native(binary, pool, lead, dur, drain)
+            print(f"[{self.role}] streams carried by the native program {binary}", flush=True)
+        else:
+            for st in self.streams:
+                for k in range(int(st.get("rx_procs", 1))):
+                    ts.append(self.ctx.Process(target=self.fill_receiver, daemon=True, args=(stopper, st, k)))
+                if self.echo or self.role == "A":          # without echo only the sender sends the streams
+                    ts.append(self.ctx.Process(target=self.fill_sender, daemon=True, args=(stopper, t_send_end, pool, t_send_start, st)))
         for t in ts:
             t.start()
         while not stopper.stopped():
@@ -582,6 +639,15 @@ class Endpoint:
             time.sleep(1.0 - time.time() % 1.0)   # write on the wall-clock second so A's and B's snapshots line up (live counters match)
         for t in ts:
             t.join(timeout=3)
+        for p in nprocs:                                # native programs end by themselves; stop any that are still running (early stop)
+            try:
+                p.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                p.terminate()
+                p.wait()
+            err = p.stderr.read().decode(errors="replace").strip() if p.stderr else ""
+            if p.returncode not in (0, None) or err:
+                print(f"[{self.role}] native program exited {p.returncode}: {err[:200]}", flush=True)
         self.write_stats(final=True)
         print(f"[{self.role}] done", flush=True)
 
