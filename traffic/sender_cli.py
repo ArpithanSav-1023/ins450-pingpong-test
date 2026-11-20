@@ -18,7 +18,7 @@ ROOT = c.PROJECT_ROOT
 # The ONF streams and ECDIS are unicast UDP with real chart bytes (CS1, best effort), each on its own port (ECDIS is assumed to be the same kind of stream).
 PAYLOAD = {"radar_mbps": 0.65, "vdr_hz": 0.6,
            "streams": [{"name": "ECDIS", "mbps": 60, "port": 20101, "cos": 1},
-                       {"name": "ONF_DB", "mbps": 500, "port": 20100, "cos": 1, "flows": 6, "rx_procs": 3},
+                       {"name": "ONF_DB", "mbps": 500, "port": 20100, "cos": 1},   # "flows": 6, "rx_procs": 3 splits it over processes: tried, did not help on the i3 receiver
                        {"name": "ONF_OTHER", "mbps": 25, "port": 20102, "cos": 1}]}
 
 
