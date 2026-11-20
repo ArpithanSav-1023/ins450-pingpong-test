@@ -22,6 +22,7 @@ Lab only: multicast TTL 1, 239.0.0.0/8 only, kill switch .STOP (scripts/estop.sh
 """
 import argparse
 import base64
+import random
 import json
 import os
 import re
@@ -76,6 +77,23 @@ def xor(b):
     for ch in b:
         x ^= ch
     return x
+
+
+class Vary:
+    """Rate factor in [lo, 1.0]: redrawn every `step` seconds (smoothed random, now and then a peak at 1.0), so the offered load wobbles below its MAXIMUM.
+    lo >= 1 means constant at the maximum. Own random generator (the streams run in forked processes and must not wobble in lockstep)."""
+
+    def __init__(self, lo=1.0, step=2.0):
+        self.lo, self.step, self.f, self.t, self.rng = float(lo), float(step), 1.0, -1e9, random.Random(int.from_bytes(os.urandom(8), "big"))
+
+    def factor(self, now):
+        if self.lo >= 1.0:
+            return 1.0
+        if now - self.t >= self.step:
+            self.t = now
+            r = self.rng.random()
+            self.f = 1.0 if r < 0.15 else self.lo if r < 0.25 else self.rng.uniform(self.lo, 1.0)      # now and then a peak at the maximum or a dip to the minimum
+        return self.f
 
 
 class Stamper:
@@ -195,6 +213,7 @@ class Endpoint:
             if not a.local:
                 c.check_group(g["addr"])
         self.lock = threading.Lock()
+        self.vary = sc.get("vary") or {}       # {"streams": 0.25, "radar": 0.25, "mix": 0.64, "step_s": 2}: lowest fraction of the maximum rate per component
         self.rad = sc.get("radar")        # optional official radar stream: {"addr","port","cos","hz","bytes"}; counted as one more group "RADAR"
         if self.rad and not a.local:
             c.check_group(self.rad["addr"])
@@ -269,9 +288,11 @@ class Endpoint:
         stopper.sleep_until(t_start)
         t0 = time.monotonic()
         due = {name: t0 for name in self.groups}
+        vr = Vary(self.vary.get("mix", 1.0), self.vary.get("step_s", 2.0))
         while time.monotonic() < t_end and not stopper.stopped():
             self.reload_selection()
             now = time.monotonic()
+            fm = vr.factor(now)
             for name in self.groups:
                 if now < due[name]:
                     continue
@@ -279,7 +300,8 @@ class Endpoint:
                     p = self.next_raw(name)            # take it from the cycle even when switched off, so the others keep their rate
                     if self.sel.enabled(selection.key(name, p)):
                         self.send_mix(name, self.stamper.stamp(name, p))
-                due[name] = max(due[name] + 1.0 / self.group_hz(name), now - 1.0)
+                f = 1.0 if self.groups[name].get("hz") else fm      # a group with its own fixed rate (VDR) does not wobble
+                due[name] = max(due[name] + 1.0 / (self.group_hz(name) * f), now - 1.0)
             time.sleep(max(0.0, min(0.02, min(due.values()) - time.monotonic())))
 
     def mix_receiver(self, stopper):
@@ -334,6 +356,7 @@ class Endpoint:
         hz = float(self.rad.get("hz") or 36.0)
         stopper.sleep_until(t_start)
         nxt, i = time.monotonic(), 0
+        vr = Vary(self.vary.get("radar", 1.0), self.vary.get("step_s", 2.0))
         while time.monotonic() < t_end and not stopper.stopped():
             if not self.sel.enabled(selection.RADAR_KEY):     # switched off on the dashboard: pause (the counter carries on where it stopped)
                 nxt = time.monotonic() + 1.0 / hz
@@ -344,7 +367,7 @@ class Endpoint:
             if self.feed.due("TX", "RADAR"):
                 self.feed.write("TX", "RADAR", f"{self.rad['addr']}:{self.rad['port']}", f"{self.path} CS{self.rad['cos']} n={radar_seq(p)} len={len(p)}", p[:40])
             i += 1
-            nxt += 1.0 / hz
+            nxt += 1.0 / (hz * vr.factor(time.monotonic()))
             time.sleep(max(0.0, nxt - time.monotonic()))
 
     def on_radar(self, data, anc, src):
@@ -412,23 +435,30 @@ class Endpoint:
         stopper.sleep_until(t_start)
         s = c.udp_socket(0 if self.sc.get("marking") == "none" else int(st.get("cos", 1)) * 8)
         s.bind((self.my_ip, 0))
-        pps = mbps * 1e6 / 8 / (FILL_PAYLOAD + WIRE_OVERHEAD)
+        max_pps = mbps * 1e6 / 8 / (FILL_PAYLOAD + WIRE_OVERHEAD)        # mbps is the MAXIMUM; the actual rate wobbles below it (Vary)
+        vr = Vary(self.vary.get("streams", 1.0), self.vary.get("step_s", 2.0))
         buf = bytearray(FILL_PAYLOAD)
         body = FILL_PAYLOAD - FILL_HDR.size
         dest = (self.peer_ip, int(st["port"]))
-        seq, off, t0 = 0, 0, time.perf_counter()
+        seq, off, credit, last = 0, 0, 0.0, time.perf_counter()
         while time.monotonic() < t_end and not stopper.stopped():
-            due = int((time.perf_counter() - t0) * pps)
-            if due - seq > pps * 0.05:            # can't keep up: skip ahead instead of bursting
-                seq = due - 256
-            for _ in range(min(due - seq, 256)):
+            now = time.perf_counter()
+            pps = max_pps * vr.factor(now)
+            credit += (now - last) * pps
+            last = now
+            if credit > pps * 0.05 + 64:           # can't keep up: skip ahead instead of bursting
+                credit = 64.0
+            n = min(int(credit), 64)               # small batches: an even stream, not 256-packet bursts that overflow switch buffers
+            for _ in range(n):
                 FILL_HDR.pack_into(buf, 0, b"FILL", seq, off)
                 buf[FILL_HDR.size:] = pool[off:off + body]
                 s.sendto(buf, dest)
                 seq += 1
                 off = (off + body) % (len(pool) - body)
+            credit -= n
             v["tx_pkts"].value = seq
-            time.sleep(0.0005)
+            if credit < 1:
+                time.sleep(0.0003)
 
     def fill_receiver(self, stopper, st):
         v = self.sv[st["name"]]

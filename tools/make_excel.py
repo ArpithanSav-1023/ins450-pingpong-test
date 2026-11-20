@@ -129,7 +129,7 @@ def summary_sheet(wb, o, ports, A):
         ws.append([])
         ws.append(["Streams of the payload profile (ECDIS / ONF, unicast UDP; counted in packets)"])
         ws.cell(ws.max_row, 1).font = Font(bold=True)
-        ws.append(["Direction", "Stream", "Target Mbit/s", "Achieved Mbit/s", "Achieved MB/s", "Packets sent", "Packets received", "Packets lost", "Loss %"])
+        ws.append(["Direction", "Stream", "Max Mbit/s", "Average sent Mbit/s", "Average sent MB/s", "Packets sent", "Packets received", "Packets lost", "Loss %"])
         for c in ws[ws.max_row]:
             c.font, c.fill = Font(bold=True), HEAD
         for d, v in o["directions"].items():

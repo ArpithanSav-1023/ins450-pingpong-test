@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SENDER side. Works on either PC. Choose the load and the length, nothing else:
 #     scripts/sender.sh 50 10          # 50 Mbit/s for 10 minutes
-#     scripts/sender.sh payload 10     # THE PAYLOAD for 10 minutes (radar 0.65, ECDIS 60, ONF database 500, other ONF 25 Mbit/s, ~80 sentences/s, VDR 3 per 5 s)
+#     scripts/sender.sh payload 10     # THE PAYLOAD for 10 minutes (radar 0.65, ECDIS 60, ONF database 500, other ONF 25 Mbit/s = MAXIMUMS, rates vary below them; sentences 64..100/s, VDR 3 per 5 s)
 #     scripts/sender.sh payload 10 100 # same, with 100 sentences/s (64..100)
 #     scripts/sender.sh                # asks you
 # Start scripts/receiver.sh with the SAME two numbers on the other PC first.

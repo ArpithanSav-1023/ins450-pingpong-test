@@ -82,7 +82,7 @@ def print_summary(o):
               f"          packets  {p['sent']} sent / {p['recv']} recv / {p['lost']} lost ({p['loss_pct']:.3f}%)   ONF dump achieved (wire) {c.rate(v['filler']['achieved_mbps'])}\n"
               f"          data     {b['sent_bytes']} B sent / {b['recv_bytes']} B recv / {b['lost_bytes']} B lost ({b['loss_pct']:.3f}%)")
         for n, x in (v.get("streams") or {}).items():
-            print(f"          stream {n:<9} target {c.rate(x['target_mbps'])}, achieved {c.rate(x['achieved_mbps'])}: {x['sent_pkts']} sent / {x['recv_pkts']} recv / {x['lost_pkts']} lost")
+            print(f"          stream {n:<9} max {c.rate(x['target_mbps'])}, average sent {c.rate(x['achieved_mbps'])}: {x['sent_pkts']} sent / {x['recv_pkts']} recv / {x['lost_pkts']} lost")
 
 
 def main():

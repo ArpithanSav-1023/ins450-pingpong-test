@@ -14,7 +14,7 @@ from . import common as c
 ROOT = c.PROJECT_ROOT
 
 
-# THE PAYLOAD (Mbit/s on the wire, per direction): radar 0.65, ECDIS 60, ONF database 500, other ONF 25, all 450 sentences ~64-100/s, VDR 3 sentences per 5 s.
+# THE PAYLOAD (MAXIMUM Mbit/s on the wire, per direction; the actual rate varies below it): radar 0.65, ECDIS 60, ONF database 500, other ONF 25, all 450 sentences ~64-100/s, VDR 3 sentences per 5 s.
 # The ONF streams and ECDIS are unicast UDP with real chart bytes (CS1, best effort), each on its own port (ECDIS is assumed to be the same kind of stream).
 PAYLOAD = {"radar_mbps": 0.65, "vdr_hz": 0.6,
            "streams": [{"name": "ECDIS", "mbps": 60, "port": 20101, "cos": 1},
@@ -34,7 +34,8 @@ def nic_speed_mbps(ip="192.168.50.1"):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--rate", required=True, help='offered load per direction, Mbit/s on the wire (mix + ONF dump), or the word "payload" for the fixed payload profile (PAYLOAD below)')
-    ap.add_argument("--sentences", type=float, default=80, help="payload profile: all 450 sentences together per second (64..100 expected, default 80)")
+    ap.add_argument("--sentences", type=float, default=100, help="payload profile: MAXIMUM of all 450 sentences together per second (default 100; the rate wobbles between 64 and this)")
+    ap.add_argument("--steady", action="store_true", help="payload profile: send every stream constantly at its maximum instead of varying it")
     ap.add_argument("--minutes", type=float, help="run length in minutes")
     ap.add_argument("--seconds", type=float, help="run length in seconds (instead of --minutes)")
     ap.add_argument("--base", default=os.path.join(ROOT, "scenarios", "pp9_025mbps.json"))
@@ -78,6 +79,8 @@ def main():
                 g["hz"] = PAYLOAD["vdr_hz"]                      # VDR: 3 sentences per 5 s
         sc.update({"name": "payload", "profile": "payload", "mix_hz": round(a.sentences / per_round, 4), "streams": [dict(x) for x in PAYLOAD["streams"]]})
         sc.pop("marking", None)
+        if not a.steady:       # the payload numbers are MAXIMUMS: every component varies below them (new random level every step_s seconds)
+            sc["vary"] = {"streams": 0.25, "radar": 0.25, "mix": round(min(64 / a.sentences, 1.0), 3), "step_s": 2.0}
     mins = f"{secs / 60:g}min"
     run = f"{sc['name']}_{mins}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
     run_dir = os.path.join(ROOT, "runs", run)
