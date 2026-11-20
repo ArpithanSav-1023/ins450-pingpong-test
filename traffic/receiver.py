@@ -21,7 +21,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs-dir", default=None, help="default: runs/sender_<port of the sender>, e.g. runs/sender_GE9")
     ap.add_argument("--ip", default="192.168.50.2")
-    ap.add_argument("--rate", type=float, help="expect exactly this load (Mbit/s); a sender that chooses another one is refused")
+    ap.add_argument("--rate", help='expect exactly this load (Mbit/s) or "payload"; a sender that chooses another one is refused')
     ap.add_argument("--minutes", type=float, help="expect exactly this length (minutes)")
     a = ap.parse_args()
     sk = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -47,8 +47,11 @@ def main():
             print("[receiver] ignoring a malformed HELLO:", e, flush=True)
             continue
         bad = []
-        if a.rate is not None and abs(float(sc.get("target_mbps", -1)) - a.rate) > 1e-9:
-            bad.append(f"load {c.rate(float(sc.get('target_mbps')))} (you typed {c.rate(a.rate)})")
+        if a.rate is not None and a.rate.lower() in ("payload", "p"):
+            if sc.get("profile") != "payload":
+                bad.append(f"load {c.rate(float(sc.get('target_mbps', 0)))} (you typed payload)")
+        elif a.rate is not None and (sc.get("profile") == "payload" or abs(float(sc.get("target_mbps", -1)) - float(a.rate)) > 1e-9):
+            bad.append(f"{'the payload profile' if sc.get('profile') == 'payload' else 'load ' + c.rate(float(sc.get('target_mbps')))} (you typed {a.rate} Mbit/s)")
         if a.minutes is not None and abs(dur / 60 - a.minutes) > 0.01:
             bad.append(f"length {dur / 60:g} min (you typed {a.minutes:g})")
         if bad:

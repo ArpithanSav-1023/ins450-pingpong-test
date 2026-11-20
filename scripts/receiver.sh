@@ -12,7 +12,7 @@ if pp_has_ns rx; then :; else
   ip -o -4 addr | grep -q "192.168.50.2/" || { echo "This PC is not set up as the receiver (no 192.168.50.2). On the GE1 PC: sudo scripts/netns_setup.sh rxonly   On the Aspire: sudo scripts/nic_role.sh receiver"; exit 1; }
 fi
 scripts/start_stack.sh >/dev/null 2>&1 && echo "Dashboard: http://localhost:3000/d/pingpong-450-receiver   (this PC = $PP_PORT)"
-if [ -n "$RATE" ]; then MBS=$(awk -v r="$RATE" 'BEGIN{printf "%.3g", r/8}'); echo "Expecting: $RATE Mbit/s ($MBS MB/s), ${MIN:-any} min"; elif [ -n "$MIN" ]; then echo "Expecting: any load, $MIN min"; fi
+if [ "$RATE" = payload ] || [ "$RATE" = p ]; then echo "Expecting: the PAYLOAD profile, ${MIN:-any} min"; elif [ -n "$RATE" ]; then MBS=$(awk -v r="$RATE" 'BEGIN{printf "%.3g", r/8}'); echo "Expecting: $RATE Mbit/s ($MBS MB/s), ${MIN:-any} min"; elif [ -n "$MIN" ]; then echo "Expecting: any load, $MIN min"; fi
 while true; do
   rm -f .STOP data/last_run.txt
   pp_exec rx "$PY" -m traffic.receiver "${ARGS[@]}" || { [ -e .STOP ] && break; sleep 2; continue; }

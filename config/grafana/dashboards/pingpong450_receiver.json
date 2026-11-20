@@ -1798,6 +1798,173 @@
     "dedupStrategy": "none",
     "sortOrder": "Descending"
    }
+  },
+  {
+   "id": 31,
+   "type": "row",
+   "title": "Payload streams: ECDIS / ONF database / other ONF (packets; MB/s in brackets)",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 70,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 30,
+   "type": "table",
+   "title": "Per stream (this side)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 71,
+    "w": 10,
+    "h": 8
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "sum by(stream) (pp_side_stream_pkts_sent{role=\"B\"})",
+     "format": "table",
+     "instant": true,
+     "range": false,
+     "refId": "A"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "sum by(stream) (pp_side_stream_pkts_received{role=\"B\"})",
+     "format": "table",
+     "instant": true,
+     "range": false,
+     "refId": "B"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "sum by(stream) (pp_side_stream_pkts_lost{role=\"B\"})",
+     "format": "table",
+     "instant": true,
+     "range": false,
+     "refId": "C"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "merge"
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "Time": true
+      },
+      "indexByName": {
+       "stream": 0
+      },
+      "renameByName": {
+       "Value #A": "sent",
+       "Value #B": "received",
+       "Value #C": "lost"
+      }
+     }
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "right"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "showHeader": true,
+    "sortBy": [
+     {
+      "displayName": "stream",
+      "desc": false
+     }
+    ]
+   }
+  },
+  {
+   "id": 32,
+   "type": "timeseries",
+   "title": "Stream throughput: Mbit/s sent and received by this side",
+   "description": "Wire rate per stream, from packet counters (1446 B on the wire per packet). 8 Mbit/s = 1 MB/s.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 10,
+    "y": 71,
+    "w": 14,
+    "h": 8
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "sum by(stream) (clamp_min(deriv(pp_side_stream_pkts_sent{role=\"B\"}[10s]), 0)) * 1446 * 8 / 1e6",
+     "legendFormat": "{{stream}} sent",
+     "refId": "A"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "sum by(stream) (clamp_min(deriv(pp_side_stream_pkts_received{role=\"B\"}[10s]), 0)) * 1446 * 8 / 1e6",
+     "legendFormat": "{{stream}} received",
+     "refId": "B"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "unit": "Mbits",
+     "min": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "showPoints": "never",
+      "spanNulls": false,
+      "thresholdsStyle": {
+       "mode": "off"
+      }
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   }
  ],
  "templating": {

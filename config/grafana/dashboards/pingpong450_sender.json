@@ -1800,7 +1800,174 @@
    }
   },
   {
+   "id": 31,
+   "type": "row",
+   "title": "Payload streams: ECDIS / ONF database / other ONF (packets; MB/s in brackets)",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 81,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
    "id": 30,
+   "type": "table",
+   "title": "Per stream (this side)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 82,
+    "w": 10,
+    "h": 8
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "sum by(stream) (pp_side_stream_pkts_sent{role=\"A\"})",
+     "format": "table",
+     "instant": true,
+     "range": false,
+     "refId": "A"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "sum by(stream) (pp_side_stream_pkts_received{role=\"A\"})",
+     "format": "table",
+     "instant": true,
+     "range": false,
+     "refId": "B"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "sum by(stream) (pp_side_stream_pkts_lost{role=\"A\"})",
+     "format": "table",
+     "instant": true,
+     "range": false,
+     "refId": "C"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "merge"
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "Time": true
+      },
+      "indexByName": {
+       "stream": 0
+      },
+      "renameByName": {
+       "Value #A": "sent",
+       "Value #B": "received",
+       "Value #C": "lost"
+      }
+     }
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "right"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "showHeader": true,
+    "sortBy": [
+     {
+      "displayName": "stream",
+      "desc": false
+     }
+    ]
+   }
+  },
+  {
+   "id": 32,
+   "type": "timeseries",
+   "title": "Stream throughput: Mbit/s sent and received by this side",
+   "description": "Wire rate per stream, from packet counters (1446 B on the wire per packet). 8 Mbit/s = 1 MB/s.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 10,
+    "y": 82,
+    "w": 14,
+    "h": 8
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "sum by(stream) (clamp_min(deriv(pp_side_stream_pkts_sent{role=\"A\"}[10s]), 0)) * 1446 * 8 / 1e6",
+     "legendFormat": "{{stream}} sent",
+     "refId": "A"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "sum by(stream) (clamp_min(deriv(pp_side_stream_pkts_received{role=\"A\"}[10s]), 0)) * 1446 * 8 / 1e6",
+     "legendFormat": "{{stream}} received",
+     "refId": "B"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "unit": "Mbits",
+     "min": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "showPoints": "never",
+      "spanNulls": false,
+      "thresholdsStyle": {
+       "mode": "off"
+      }
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "id": 33,
    "type": "row",
    "title": "Echo packet loss (packets the receiver sent back that never reached this PC)",
    "collapsed": false,
@@ -1813,7 +1980,7 @@
    "panels": []
   },
   {
-   "id": 31,
+   "id": 34,
    "type": "stat",
    "title": "Echo packets lost (mix + radar + ONF)",
    "datasource": {
@@ -1882,7 +2049,7 @@
    }
   },
   {
-   "id": 32,
+   "id": 35,
    "type": "stat",
    "title": "Echo packet loss %",
    "datasource": {
@@ -1947,7 +2114,7 @@
    }
   },
   {
-   "id": 33,
+   "id": 36,
    "type": "stat",
    "title": "Radar echoes lost",
    "datasource": {
@@ -2016,7 +2183,7 @@
    }
   },
   {
-   "id": 34,
+   "id": 37,
    "type": "stat",
    "title": "Mix echoes not back (sent - echoed)",
    "datasource": {
@@ -2085,7 +2252,7 @@
    }
   },
   {
-   "id": 35,
+   "id": 38,
    "type": "timeseries",
    "title": "Echo packet loss % over time",
    "description": "Share of the echo packets that went missing, per 30 s window.",
@@ -2155,7 +2322,7 @@
    }
   },
   {
-   "id": 36,
+   "id": 39,
    "type": "timeseries",
    "title": "Echo packets lost per second",
    "description": "Missing echo packets per second: all, ONF dump only, and mix messages (radar included).",
@@ -2239,25 +2406,25 @@
    }
   },
   {
-   "id": 37,
+   "id": 40,
    "type": "row",
    "title": "Choose what the sender sends (tick = sent, applies within about a second)",
    "collapsed": false,
    "gridPos": {
     "x": 0,
-    "y": 81,
+    "y": 90,
     "w": 24,
     "h": 1
    },
    "panels": []
   },
   {
-   "id": 38,
+   "id": 41,
    "type": "text",
    "title": "Sender selection",
    "gridPos": {
     "x": 0,
-    "y": 82,
+    "y": 91,
     "w": 24,
     "h": 16
    },

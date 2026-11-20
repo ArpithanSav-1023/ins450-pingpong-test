@@ -71,6 +71,8 @@ def main():
         "ml": Gauge("pp_side_messages_lost", "all messages seen missing", R),
         "active": Gauge("pp_side_active", "1 while this side is running", R), "elapsed": Gauge("pp_side_sent_seconds", "seconds this side has been sending", R),
     }
+    st_g = {k: Gauge(f"pp_side_stream_{k}", d, ["role", "stream"]) for k, d in (("pkts_sent", "stream packets sent"), ("pkts_received", "stream packets received"),
+                                                                              ("pkts_lost", "stream packets this side saw missing"), ("target_mbps", "stream target Mbit/s"))}
     side_info = Gauge("pp_side_info", "run followed by this side", ["role", "run", "scenario"])
     # which switch port THIS PC is plugged into (the 100 Mbit/s USB NIC = GE9, otherwise GE1), so dashboards pick the right port by themselves
     try:        # per-PC setting file (data/pp_local.env: PP_PORT=GE9)
@@ -128,7 +130,7 @@ def main():
                 g["d_loss"].labels(d).set(100 * dl / tot if tot else 0)
         else:
             active_g.set(0)
-        for gg in list(sd.values()) + [side_info]:
+        for gg in list(sd.values()) + list(st_g.values()) + [side_info]:
             gg.clear()
         for role in "AB":
             st = S.get(role) if run else None
@@ -146,6 +148,9 @@ def main():
             sd["fs"].labels(role).set(f["tx_pkts"]); sd["fr"].labels(role).set(f["rx_pkts"]); sd["fl"].labels(role).set(f["rx_lost"])
             sd["ps"].labels(role).set(ms + f["tx_pkts"]); sd["pr"].labels(role).set(mr + f["rx_pkts"]); sd["pl"].labels(role).set(ml + f["rx_lost"])
             sd["ms"].labels(role).set(ms); sd["mr"].labels(role).set(mr); sd["ml"].labels(role).set(ml)
+            for n, x in (st.get("streams") or {}).items():
+                st_g["pkts_sent"].labels(role, n).set(x["tx_pkts"]); st_g["pkts_received"].labels(role, n).set(x["rx_pkts"])
+                st_g["pkts_lost"].labels(role, n).set(x["rx_lost"]); st_g["target_mbps"].labels(role, n).set(x["mbps"])
             sd["active"].labels(role).set(1 if time.time() - st["ts"] < 4 and not st["final"] else 0)
             sd["elapsed"].labels(role).set(st.get("sent_secs") or 0)
             side_info.labels(role, os.path.basename(run), st["scenario"]).set(1)

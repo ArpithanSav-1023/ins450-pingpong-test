@@ -73,6 +73,17 @@ def build(role, title, uid, port, intro, labels):
     for p_ in panels:                                     # the throughput panel got its own full-width row at y=11: push everything below it down
         if p_["gridPos"]["y"] >= 11 and "throughput" not in p_.get("title", ""):
             p_["gridPos"]["y"] += 7
+    # streams of the payload profile (ECDIS, ONF database, other ONF): unicast UDP, counted in packets
+    yb = max(p_["gridPos"]["y"] + p_["gridPos"]["h"] for p_ in panels)
+    sent_m = f'sum by(stream) (clamp_min(deriv(pp_side_stream_pkts_sent{{{R}}}[10s]), 0)) * 1446 * 8 / 1e6'
+    recv_m = f'sum by(stream) (clamp_min(deriv(pp_side_stream_pkts_received{{{R}}}[10s]), 0)) * 1446 * 8 / 1e6'
+    tbl = table("Per stream (this side)", pos(0, yb + 1, 10, 8),
+                [("A", f'sum by(stream) (pp_side_stream_pkts_sent{{{R}}})'), ("B", f'sum by(stream) (pp_side_stream_pkts_received{{{R}}})'), ("C", f'sum by(stream) (pp_side_stream_pkts_lost{{{R}}})')])
+    tbl["transformations"][1]["options"]["indexByName"] = {"stream": 0}
+    tbl["options"]["sortBy"] = [{"displayName": "stream", "desc": False}]
+    panels += [row("Payload streams: ECDIS / ONF database / other ONF (packets; MB/s in brackets)", yb), tbl,
+               timeseries("Stream throughput: Mbit/s sent and received by this side", "Wire rate per stream, from packet counters (1446 B on the wire per packet). 8 Mbit/s = 1 MB/s.",
+                          [target(sent_m, "{{stream}} sent", "A"), target(recv_m, "{{stream}} received", "B")], pos(10, yb + 1, 14, 8), unit="Mbits")]
     if role == "A":       # "Echo packet loss": everything the receiver sent back (echo of the mix, radar, ONF dump) that never arrived here
         y0 = next(p_["gridPos"]["y"] for p_ in panels if p_.get("title", "").startswith("Per multicast group"))
         for p_ in panels:

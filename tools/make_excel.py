@@ -125,6 +125,17 @@ def summary_sheet(wb, o, ports, A):
         ws.append([d, m["sent"], m["recv"], m["lost"], round(m["loss_pct"], 4), m["bad"], m["wrong_dscp"], p["sent"], p["recv"], p["lost"], round(p["loss_pct"], 4),
                    b["sent_bytes"], b["recv_bytes"], b["lost_bytes"], round(b["loss_pct"], 4), v["filler"]["achieved_mbps"],
                    mb(b["sent_bytes"]), mb(b["recv_bytes"]), mb(b["lost_bytes"]), mb(m["sent_bytes"]), round(v["filler"]["achieved_mbps"] / 8, 3)])
+    if any(v.get("streams") for v in o["directions"].values()):
+        ws.append([])
+        ws.append(["Streams of the payload profile (ECDIS / ONF, unicast UDP; counted in packets)"])
+        ws.cell(ws.max_row, 1).font = Font(bold=True)
+        ws.append(["Direction", "Stream", "Target Mbit/s", "Achieved Mbit/s", "Achieved MB/s", "Packets sent", "Packets received", "Packets lost", "Loss %"])
+        for c in ws[ws.max_row]:
+            c.font, c.fill = Font(bold=True), HEAD
+        for d, v in o["directions"].items():
+            for n, x in (v.get("streams") or {}).items():
+                ws.append([d, n, x["target_mbps"], x["achieved_mbps"], round(x["achieved_mbps"] / 8, 3), x["sent_pkts"], x["recv_pkts"], x["lost_pkts"],
+                           round(100 * x["lost_pkts"] / x["sent_pkts"], 4) if x["sent_pkts"] else 0])
     ws.append([])
     ws.append(["Switch port utilisation during the run (SNMP via Prometheus)"])
     ws.cell(ws.max_row, 1).font = Font(bold=True)

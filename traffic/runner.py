@@ -55,8 +55,14 @@ def summarize(run_dir):
         pk_sent, pk_recv = tot["sent"] + f_s["tx_pkts"], tot["recv"] + f_r["rx_pkts"]
         by_sent, by_recv = tot["sent_bytes"] + f_s["tx_bytes"], tot["recv_bytes"] + f_r["rx_bytes"]
         dur = max(s.get("sent_secs") or s.get("duration_s") or 1, 1)
+        per_stream = {}
+        for n, st in (s.get("streams") or {}).items():       # ECDIS / ONF streams of the payload profile
+            rr = (r.get("streams") or {}).get(n, {"rx_pkts": 0})
+            per_stream[n] = {"target_mbps": st["mbps"], "sent_pkts": st["tx_pkts"], "recv_pkts": rr["rx_pkts"], "lost_pkts": max(st["tx_pkts"] - rr["rx_pkts"], 0),
+                             "achieved_mbps": round(st["tx_pkts"] * 1446 * 8 / 1e6 / dur, 2)}
         out["directions"][d] = {
             "messages": {**tot, "loss_pct": 100 * tot["lost"] / tot["sent"] if tot["sent"] else 0},
+            "streams": per_stream,
             "filler": {"sent_pkts": f_s["tx_pkts"], "recv_pkts": f_r["rx_pkts"], "lost_pkts": f_lost, "achieved_mbps": round(f_s["tx_pkts"] * 1446 * 8 / 1e6 / dur, 2)},
             "packets": {"sent": pk_sent, "recv": pk_recv, "lost": max(pk_sent - pk_recv, 0), "loss_pct": 100 * max(pk_sent - pk_recv, 0) / pk_sent if pk_sent else 0},
             "data": {"sent_bytes": by_sent, "recv_bytes": by_recv, "lost_bytes": max(by_sent - by_recv, 0), "loss_pct": 100 * max(by_sent - by_recv, 0) / by_sent if by_sent else 0}}
@@ -75,6 +81,8 @@ def print_summary(o):
         print(f"{d}:  messages {m['sent']} sent / {m['recv']} recv / {m['lost']} lost ({m['loss_pct']:.3f}%), bad {m['bad']}, wrong DSCP {m['wrong_dscp']}\n"
               f"          packets  {p['sent']} sent / {p['recv']} recv / {p['lost']} lost ({p['loss_pct']:.3f}%)   ONF dump achieved (wire) {c.rate(v['filler']['achieved_mbps'])}\n"
               f"          data     {b['sent_bytes']} B sent / {b['recv_bytes']} B recv / {b['lost_bytes']} B lost ({b['loss_pct']:.3f}%)")
+        for n, x in (v.get("streams") or {}).items():
+            print(f"          stream {n:<9} target {c.rate(x['target_mbps'])}, achieved {c.rate(x['achieved_mbps'])}: {x['sent_pkts']} sent / {x['recv_pkts']} recv / {x['lost_pkts']} lost")
 
 
 def main():

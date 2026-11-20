@@ -212,7 +212,9 @@ class Endpoint:
         self.feed = Feed(os.path.join(a.run_dir, f"feed_{a.role}.log"), a.role)
         self.path = "GE1>GE9" if a.role == "A" else "GE9>GE1"
         ctx = mp.get_context("fork")
-        self.fv = {k: ctx.Value("q", 0, lock=False) for k in ("tx_pkts", "rx_pkts", "rx_bytes", "rx_lost")}
+        # unicast UDP streams that carry the bulk load (chart/database data): [{name, port, cos, mbps}]. Default: one "ONF" stream whose rate is target - mix.
+        self.streams = [dict(x) for x in sc.get("streams")] if sc.get("streams") else [{"name": "ONF", "port": FILL_PORT, "cos": 1, "mbps": None}]
+        self.sv = {x["name"]: {k: ctx.Value("q", 0, lock=False) for k in ("tx_pkts", "rx_pkts", "rx_bytes", "rx_lost")} for x in self.streams}
         self.ctx = ctx
 
     # ---- sockets
@@ -259,19 +261,26 @@ class Endpoint:
             print(f"[{self.role}] selection changed: {len(self.sel.disabled)} item(s) switched off" + (f" ({', '.join(sorted(self.sel.disabled))[:200]})" if self.sel.disabled else ""), flush=True)
 
     # ---- threads
+    def group_hz(self, name):
+        """rounds per second of one group: the scenario's mix_hz unless the group has its own "hz" (e.g. VDR: 3 sentences per 5 s = 0.6)"""
+        return float(self.groups[name].get("hz") or self.sc.get("mix_hz", 10))
+
     def mix_sender(self, stopper, t_end, t_start):
-        hz = float(self.sc.get("mix_hz", 10))
         stopper.sleep_until(t_start)
-        nxt = time.monotonic()
+        t0 = time.monotonic()
+        due = {name: t0 for name in self.groups}
         while time.monotonic() < t_end and not stopper.stopped():
             self.reload_selection()
+            now = time.monotonic()
             for name in self.groups:
+                if now < due[name]:
+                    continue
                 for _ in range(int(self.groups[name].get("per_round", 1))):
                     p = self.next_raw(name)            # take it from the cycle even when switched off, so the others keep their rate
                     if self.sel.enabled(selection.key(name, p)):
                         self.send_mix(name, self.stamper.stamp(name, p))
-            nxt += 1.0 / hz
-            time.sleep(max(0.0, nxt - time.monotonic()))
+                due[name] = max(due[name] + 1.0 / self.group_hz(name), now - 1.0)
+            time.sleep(max(0.0, min(0.02, min(due.values()) - time.monotonic())))
 
     def mix_receiver(self, stopper):
         sel = selectors.DefaultSelector()
@@ -396,17 +405,17 @@ class Endpoint:
         if self.role == "B":                        # the "pong": answer every datagram with one of our own on the same group
             self.send_mix(group, self.next_payload(group))
 
-    def fill_sender(self, stopper, t_end, pool, t_start):
-        mbps = self.fill_mbps
+    def fill_sender(self, stopper, t_end, pool, t_start, st):
+        mbps, v = float(st["mbps"] or 0), self.sv[st["name"]]
         if mbps <= 0:
             return
         stopper.sleep_until(t_start)
-        s = c.udp_socket(0 if self.sc.get("marking") == "none" else "CS1")
+        s = c.udp_socket(0 if self.sc.get("marking") == "none" else int(st.get("cos", 1)) * 8)
         s.bind((self.my_ip, 0))
         pps = mbps * 1e6 / 8 / (FILL_PAYLOAD + WIRE_OVERHEAD)
         buf = bytearray(FILL_PAYLOAD)
         body = FILL_PAYLOAD - FILL_HDR.size
-        dest = (self.peer_ip, FILL_PORT)
+        dest = (self.peer_ip, int(st["port"]))
         seq, off, t0 = 0, 0, time.perf_counter()
         while time.monotonic() < t_end and not stopper.stopped():
             due = int((time.perf_counter() - t0) * pps)
@@ -418,13 +427,14 @@ class Endpoint:
                 s.sendto(buf, dest)
                 seq += 1
                 off = (off + body) % (len(pool) - body)
-            self.fv["tx_pkts"].value = seq
+            v["tx_pkts"].value = seq
             time.sleep(0.0005)
 
-    def fill_receiver(self, stopper):
+    def fill_receiver(self, stopper, st):
+        v = self.sv[st["name"]]
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1 << 23)
-        s.bind((self.my_ip, FILL_PORT))
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1 << 24)
+        s.bind((self.my_ip, int(st["port"])))
         s.settimeout(0.2)
         buf = bytearray(2048)
         gap = Gap()
@@ -442,8 +452,8 @@ class Endpoint:
             t = time.monotonic()
             if t - last_pub > 0.2:
                 last_pub = t
-                self.fv["rx_pkts"].value, self.fv["rx_bytes"].value, self.fv["rx_lost"].value = pk, by, lost
-        self.fv["rx_pkts"].value, self.fv["rx_bytes"].value, self.fv["rx_lost"].value = pk, by, lost
+                v["rx_pkts"].value, v["rx_bytes"].value, v["rx_lost"].value = pk, by, lost
+        v["rx_pkts"].value, v["rx_bytes"].value, v["rx_lost"].value = pk, by, lost
 
     # ---- stats
     def snapshot(self, final=False):
@@ -451,8 +461,12 @@ class Endpoint:
             return {"role": self.role, "ts": time.time(), "start": self.t_start, "final": final,
                     "scenario": self.sc["name"], "target_mbps": self.sc.get("target_mbps", 0), "filler_mbps": round(self.fill_mbps, 2), "duration_s": getattr(self, "duration_s", 0), "sent_secs": round(self.sent_secs(), 2),
                     "tx": {k: dict(v) for k, v in self.tx.items()}, "rx": {k: dict(v) for k, v in self.rx.items()},
-                    "filler": {"tx_pkts": self.fv["tx_pkts"].value, "tx_bytes": self.fv["tx_pkts"].value * FILL_PAYLOAD,
-                               "rx_pkts": self.fv["rx_pkts"].value, "rx_bytes": self.fv["rx_bytes"].value, "rx_lost": self.fv["rx_lost"].value}}
+                    "filler": {"tx_pkts": sum(v["tx_pkts"].value for v in self.sv.values()), "tx_bytes": sum(v["tx_pkts"].value for v in self.sv.values()) * FILL_PAYLOAD,
+                               "rx_pkts": sum(v["rx_pkts"].value for v in self.sv.values()), "rx_bytes": sum(v["rx_bytes"].value for v in self.sv.values()),
+                               "rx_lost": sum(v["rx_lost"].value for v in self.sv.values())},
+                    "streams": {x["name"]: {"port": x["port"], "mbps": round(float(x["mbps"] or 0), 3), "tx_pkts": self.sv[x["name"]]["tx_pkts"].value,
+                                            "tx_bytes": self.sv[x["name"]]["tx_pkts"].value * FILL_PAYLOAD, "rx_pkts": self.sv[x["name"]]["rx_pkts"].value,
+                                            "rx_bytes": self.sv[x["name"]]["rx_bytes"].value, "rx_lost": self.sv[x["name"]]["rx_lost"].value} for x in self.streams}}
 
     def sent_secs(self):
         """Seconds the senders have actually been sending (a run stopped early reports its real length)."""
@@ -477,37 +491,45 @@ class Endpoint:
         self.t_send_start, self.t_send_end = t_send_start, t_send_end
         # estimate the mix's own wire rate so mix + filler = target
         probe, b = Stamper(), s450.Builder(False)
-        sizes, per_sfi = [], {}
+        per, per_sfi, sent_per_s = 0.0, {}, 0.0
         for n, g in self.groups.items():
+            hz = self.group_hz(n)
             for p in s450.payloads(n, b):
                 p = probe.stamp(n, p)
-                sizes.append(len(p) + WIRE_OVERHEAD)
+                per += (len(p) + WIRE_OVERHEAD) * 8 * hz / 1e6
+                sent_per_s += hz
                 m = NM_TAG.match(p)
                 if m:
                     sfi = next((x for x in m.group(1).decode().split(",") if x.startswith("s:")), "s:?")
-                    per_sfi[sfi] = per_sfi.get(sfi, 0) + 1
+                    per_sfi[sfi] = per_sfi.get(sfi, 0) + hz
         worst = max(per_sfi.items(), key=lambda kv: kv[1])
-        if worst[1] * float(sc.get("mix_hz", 10)) > MAX_SENTENCES_PER_SENSOR + 1e-9:
-            raise SystemExit(f"REFUSING: sensor {worst[0][2:]} would send {worst[1] * float(sc.get('mix_hz', 10)):.0f} sentences/s (limit {MAX_SENTENCES_PER_SENSOR}); lower mix_hz")
-        per = sum(sizes) * 8 * float(sc.get("mix_hz", 10)) / 1e6
+        if worst[1] > MAX_SENTENCES_PER_SENSOR + 1e-9:
+            raise SystemExit(f"REFUSING: sensor {worst[0][2:]} would send {worst[1]:.0f} sentences/s (limit {MAX_SENTENCES_PER_SENSOR}); lower mix_hz")
+        self.sentences_per_s = sent_per_s
         rad_mbps = 0.0
         if self.rad:       # same on both sides (computed from the scenario) so each side's ONF dump gets the same remainder
             rad_mbps = radar_wire_bytes(self.rad.get("bytes", 17160)) * 8 * float(self.rad["hz"]) / 1e6
             per += rad_mbps
-            if per > float(sc.get("target_mbps", 0)):
+            if not sc.get("streams") and per > float(sc.get("target_mbps", 0)):
                 raise SystemExit(f"REFUSING: mix + radar already need {c.rate(round(per, 2))}, above the target {c.rate(float(sc.get('target_mbps', 0)))}. Raise the rate.")
         self.mix_mbps = per
-        self.fill_mbps = max(0.0, float(sc.get("target_mbps", 0)) - per)
+        if sc.get("streams"):      # payload profile: every stream has its own rate, the total is the sum
+            self.fill_mbps = sum(float(x["mbps"]) for x in self.streams)
+            sc["target_mbps"] = self.sc["target_mbps"] = round(per + self.fill_mbps, 2)
+        else:
+            self.fill_mbps = max(0.0, float(sc.get("target_mbps", 0)) - per)
+            self.streams[0]["mbps"] = self.fill_mbps
         pool = load_pool(self.a.charts_dir)
-        print(f"[{self.role}] {self.my_ip} -> {self.peer_ip}  {sc['name']}: mix{' (incl. radar ' + c.rate(round(rad_mbps, 2)) + ')' if self.rad else ''} {c.rate(round(per, 2))} + ONF dump {c.rate(round(self.fill_mbps, 1))} = target {c.rate(float(sc.get('target_mbps', 0)))}, {dur:.0f}s", flush=True)
+        print(f"[{self.role}] {self.my_ip} -> {self.peer_ip}  {sc['name']}: mix{' (incl. radar ' + c.rate(round(rad_mbps, 2)) + ')' if self.rad else ''} {c.rate(round(per, 2))} + {' + '.join(x['name'] + ' ' + c.rate(round(float(x['mbps']), 1)) for x in self.streams) if sc.get('streams') else 'ONF dump ' + c.rate(round(self.fill_mbps, 1))} = {'total' if sc.get('streams') else 'target'} {c.rate(float(sc.get('target_mbps', 0)))}, {dur:.0f}s", flush=True)
         ts = [threading.Thread(target=self.mix_receiver, daemon=True, args=(stopper,))]
         if self.role == "A":
             ts.append(threading.Thread(target=self.mix_sender, daemon=True, args=(stopper, t_send_end, t_send_start)))
             if self.rad:
                 ts.append(threading.Thread(target=self.radar_sender, daemon=True, args=(stopper, t_send_end, t_send_start)))
         # filler runs in separate processes: Python threads share one GIL and cannot do 200 Mbit/s of packets plus the mix
-        ts += [self.ctx.Process(target=self.fill_receiver, daemon=True, args=(stopper,)),
-               self.ctx.Process(target=self.fill_sender, daemon=True, args=(stopper, t_send_end, pool, t_send_start))]
+        for st in self.streams:
+            ts += [self.ctx.Process(target=self.fill_receiver, daemon=True, args=(stopper, st)),
+                   self.ctx.Process(target=self.fill_sender, daemon=True, args=(stopper, t_send_end, pool, t_send_start, st))]
         for t in ts:
             t.start()
         while not stopper.stopped():
