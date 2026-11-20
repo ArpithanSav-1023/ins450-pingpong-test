@@ -3,6 +3,8 @@
 #  pp_exec NS cmd...: runs inside the namespace NS when this PC has one (receiver/sender via scripts/netns_setup.sh rxonly|txonly), else directly
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$ROOT" || exit 1
+# optional per-PC settings (not in git): NIC, PP_PORT, PP_PEER, PP_PEER_DIR, EXTRA (see docs/RUN_SENDER_RECEIVER.md, "A different PC")
+[ -f "$ROOT/data/pp_local.env" ] && . "$ROOT/data/pp_local.env"
 if [ -z "${PP_PORT:-}" ]; then
   if ls /sys/class/net/ 2>/dev/null | grep -q '^enx207bd51e1472$'; then PP_PORT=GE9; else PP_PORT=GE1; fi
 fi

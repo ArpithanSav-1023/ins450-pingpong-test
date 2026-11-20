@@ -3,7 +3,7 @@
 # Installs docker (for this PC's own Grafana), snmp tools, a python venv; makes the test NIC address permanent; allows the syslog port 514.
 set -e
 [ "$(id -u)" = 0 ] || { echo "run with sudo"; exit 1; }
-U=${SUDO_USER:?run through sudo}; ROOT=$(cd "$(dirname "$0")/.." && pwd); NIC=${NIC:-enx207bd51e1472}
+U=${SUDO_USER:?run through sudo}; ROOT=$(cd "$(dirname "$0")/.." && pwd); [ -f "$ROOT/data/pp_local.env" ] && . "$ROOT/data/pp_local.env"; NIC=${NIC:-enx207bd51e1472}
 apt-get update -y
 apt-get install -y docker.io docker-compose-v2 snmp python3-venv rsync git
 usermod -aG docker "$U"
