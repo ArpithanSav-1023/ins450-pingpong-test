@@ -40,6 +40,7 @@ from . import sender450 as s450
 
 FILL_PORT = 20100            # CCRS JSON port from the sheet: the ONF dump (no 450 header) is the load filler
 FILL_PAYLOAD = 1400          # UDP payload bytes of one filler packet (wire = +46: Eth+FCS 18, IP 20, UDP 8)
+FILL_MAGIC = b"FLL"           # stream packet header: FILL_MAGIC + flow id (1 byte), per-flow sequence number, pool offset
 FILL_HDR = struct.Struct(">4sQI")   # magic, seq, pool offset
 WIRE_OVERHEAD = 46
 MAX_SENTENCES_PER_SENSOR = 13   # one sensor (talker/SFI) may send at most 13 sentences per second
@@ -234,7 +235,10 @@ class Endpoint:
         ctx = mp.get_context("fork")
         # unicast UDP streams that carry the bulk load (chart/database data): [{name, port, cos, mbps}]. Default: one "ONF" stream whose rate is target - mix.
         self.streams = [dict(x) for x in sc.get("streams")] if sc.get("streams") else [{"name": "ONF", "port": FILL_PORT, "cos": 1, "mbps": None}]
-        self.sv = {x["name"]: {k: ctx.Value("q", 0, lock=False) for k in ("tx_pkts", "rx_pkts", "rx_bytes", "rx_lost")} for x in self.streams}
+        # per stream: tx_pkts (sender) and one counter set per RECEIVER PROCESS (rx_procs processes share the port with SO_REUSEPORT, flows spread by source port)
+        self.sv = {x["name"]: {"tx_pkts": ctx.Value("q", 0, lock=False),
+                               "rx": [{k: ctx.Value("q", 0, lock=False) for k in ("rx_pkts", "rx_bytes", "rx_lost")} for _ in range(int(x.get("rx_procs", 1)))]}
+                   for x in self.streams}
         self.ctx = ctx
 
     # ---- sockets
@@ -434,8 +438,12 @@ class Endpoint:
         if mbps <= 0:
             return
         stopper.sleep_until(t_start)
-        s = c.udp_socket(0 if self.sc.get("marking") == "none" else int(st.get("cos", 1)) * 8)
-        s.bind((self.my_ip, 0))
+        flows = max(1, int(st.get("flows", 1)))       # several source ports, each its own flow with its own sequence numbers (spread over the receiver processes)
+        socks = []
+        for _ in range(flows):
+            s = c.udp_socket(0 if self.sc.get("marking") == "none" else int(st.get("cos", 1)) * 8)
+            s.bind((self.my_ip, 0))
+            socks.append(s)
         max_pps = mbps * 1e6 / 8 / (FILL_PAYLOAD + WIRE_OVERHEAD)        # mbps is the MAXIMUM; the actual rate wobbles below it (Vary)
         vr = Vary(self.vary.get("streams", 1.0), self.vary.get("step_s", 2.0))
         buf = bytearray(FILL_PAYLOAD)
@@ -451,9 +459,10 @@ class Endpoint:
                 credit = 64.0
             n = min(int(credit), 64)               # small batches: an even stream, not 256-packet bursts that overflow switch buffers
             for _ in range(n):
-                FILL_HDR.pack_into(buf, 0, b"FILL", seq, off)
+                fl = seq % flows
+                FILL_HDR.pack_into(buf, 0, FILL_MAGIC + bytes([fl]), seq // flows, off)     # magic + flow id, per-flow sequence number, pool offset
                 buf[FILL_HDR.size:] = pool[off:off + body]
-                s.sendto(buf, dest)
+                socks[fl].sendto(buf, dest)
                 seq += 1
                 off = (off + body) % (len(pool) - body)
             credit -= n
@@ -461,14 +470,17 @@ class Endpoint:
             if credit < 1:
                 time.sleep(0.0003)
 
-    def fill_receiver(self, stopper, st):
-        v = self.sv[st["name"]]
+    def fill_receiver(self, stopper, st, k=0):
+        """Receiver process k of this stream. rx_procs processes bind the same port (SO_REUSEPORT); the kernel hands each flow (source port) to one of them,
+        so every process sees complete flows and can count gaps per flow."""
+        v = self.sv[st["name"]]["rx"][k]
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1 << 24)
         s.bind((self.my_ip, int(st["port"])))
         s.settimeout(0.2)
         buf = bytearray(2048)
-        gap = Gap()
+        gaps = {}
         pk = by = lost = 0
         last_pub = 0.0
         while not stopper.stopped():
@@ -476,10 +488,10 @@ class Endpoint:
                 n = s.recv_into(buf)
             except socket.timeout:
                 n = 0
-            if n and n >= FILL_HDR.size and buf[:4] == b"FILL":
+            if n and n >= FILL_HDR.size and buf[:3] == FILL_MAGIC:
                 pk += 1
                 by += n
-                lost += gap.feed(struct.unpack_from(">Q", buf, 4)[0], 2 ** 62)
+                lost += gaps.setdefault(buf[3], Gap()).feed(struct.unpack_from(">Q", buf, 4)[0], 2 ** 62)
             t = time.monotonic()
             if t - last_pub > 0.2:
                 last_pub = t
@@ -493,11 +505,11 @@ class Endpoint:
                     "scenario": self.sc["name"], "target_mbps": self.sc.get("target_mbps", 0), "filler_mbps": round(self.fill_mbps, 2), "duration_s": getattr(self, "duration_s", 0), "sent_secs": round(self.sent_secs(), 2),
                     "tx": {k: dict(v) for k, v in self.tx.items()}, "rx": {k: dict(v) for k, v in self.rx.items()},
                     "filler": {"tx_pkts": sum(v["tx_pkts"].value for v in self.sv.values()), "tx_bytes": sum(v["tx_pkts"].value for v in self.sv.values()) * FILL_PAYLOAD,
-                               "rx_pkts": sum(v["rx_pkts"].value for v in self.sv.values()), "rx_bytes": sum(v["rx_bytes"].value for v in self.sv.values()),
-                               "rx_lost": sum(v["rx_lost"].value for v in self.sv.values())},
+                               "rx_pkts": sum(r["rx_pkts"].value for v in self.sv.values() for r in v["rx"]), "rx_bytes": sum(r["rx_bytes"].value for v in self.sv.values() for r in v["rx"]),
+                               "rx_lost": sum(r["rx_lost"].value for v in self.sv.values() for r in v["rx"])},
                     "streams": {x["name"]: {"port": x["port"], "mbps": round(float(x["mbps"] or 0), 3), "tx_pkts": self.sv[x["name"]]["tx_pkts"].value,
-                                            "tx_bytes": self.sv[x["name"]]["tx_pkts"].value * FILL_PAYLOAD, "rx_pkts": self.sv[x["name"]]["rx_pkts"].value,
-                                            "rx_bytes": self.sv[x["name"]]["rx_bytes"].value, "rx_lost": self.sv[x["name"]]["rx_lost"].value} for x in self.streams}}
+                                            "tx_bytes": self.sv[x["name"]]["tx_pkts"].value * FILL_PAYLOAD, "rx_pkts": sum(r["rx_pkts"].value for r in self.sv[x["name"]]["rx"]),
+                                            "rx_bytes": sum(r["rx_bytes"].value for r in self.sv[x["name"]]["rx"]), "rx_lost": sum(r["rx_lost"].value for r in self.sv[x["name"]]["rx"])} for x in self.streams}}
 
     def sent_secs(self):
         """Seconds the senders have actually been sending (a run stopped early reports its real length)."""
@@ -559,7 +571,8 @@ class Endpoint:
                 ts.append(threading.Thread(target=self.radar_sender, daemon=True, args=(stopper, t_send_end, t_send_start)))
         # filler runs in separate processes: Python threads share one GIL and cannot do 200 Mbit/s of packets plus the mix
         for st in self.streams:
-            ts.append(self.ctx.Process(target=self.fill_receiver, daemon=True, args=(stopper, st)))
+            for k in range(int(st.get("rx_procs", 1))):
+                ts.append(self.ctx.Process(target=self.fill_receiver, daemon=True, args=(stopper, st, k)))
             if self.echo or self.role == "A":          # without echo only the sender sends the streams
                 ts.append(self.ctx.Process(target=self.fill_sender, daemon=True, args=(stopper, t_send_end, pool, t_send_start, st)))
         for t in ts:
