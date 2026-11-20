@@ -168,15 +168,21 @@ def build(run_dir):
     json.dump(summ, open(os.path.join(run_dir, "summary.json"), "w"), indent=1)
     wb = openpyxl.load_workbook(TEMPLATE)
     ws1 = wb[SHEET]
-    ws2 = sheet_for(wb, f"Echo {pb} to {pa}", ws1)
+    echo = scn.get("echo") is not False
+    ws2 = sheet_for(wb, f"Echo {pb} to {pa}", ws1) if echo else ws1
     fill_sheet(ws1, A["tx"], B["rx"], hz)
-    fill_sheet(ws2, B["tx"], A["rx"], hz)
+    if echo:
+        fill_sheet(ws2, B["tx"], A["rx"], hz)
     fill_radar(ws1, A["tx"], B["rx"], scn.get("radar"))
-    fill_radar(ws2, B["tx"], A["rx"], scn.get("radar"))
+    if echo:
+        fill_radar(ws2, B["tx"], A["rx"], scn.get("radar"))
     fill_onf(ws1, A["filler"], B["filler"])
-    fill_onf(ws2, B["filler"], A["filler"])
-    ws1["A4"], ws2["A4"] = f"{pa} sends -> {pb} receives", f"{pb} echoes -> {pa} receives (reply path)"
-    ws1["A10"], ws2["A10"] = "Direction (counts taken at the receiving port)", "Direction (counts taken at the receiving port)"
+    if echo:
+        fill_onf(ws2, B["filler"], A["filler"])
+        ws2["A4"] = f"{pb} echoes -> {pa} receives (reply path)"
+        ws2["A10"] = "Direction (counts taken at the receiving port)"
+    ws1["A4"] = f"{pa} sends -> {pb} receives"
+    ws1["A10"] = "Direction (counts taken at the receiving port)"
     summary_sheet(wb, summ, ports, A)
     wb.move_sheet("Dropdown options", offset=len(wb.sheetnames))   # keep the dropdown list sheet last
     out = os.path.join(run_dir, f"results_{summ['scenario']}.xlsx")

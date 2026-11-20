@@ -40,6 +40,8 @@ def summarize(run_dir):
     scn = json.load(open(os.path.join(run_dir, "scenario.json")))
     pa, pb = scn.get("a_port", "GE1"), scn.get("b_port", "GE9")
     dirs = {f"{pa}->{pb}": (A, B), f"{pb}->{pa}": (B, A)}   # (sender, receiver)
+    if scn.get("echo") is False:
+        dirs = {f"{pa}->{pb}": (A, B)}                       # one-way test: the receiver sends nothing back
     out = {"scenario": A["scenario"], "target_mbps": A["target_mbps"], "directions": {}}
     rows = []
     for d, (s, r) in dirs.items():

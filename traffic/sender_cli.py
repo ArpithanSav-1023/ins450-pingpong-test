@@ -35,6 +35,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--rate", required=True, help='offered load per direction, Mbit/s on the wire (mix + ONF dump), or the word "payload" for the fixed payload profile (PAYLOAD below)')
     ap.add_argument("--sentences", type=float, default=100, help="payload profile: MAXIMUM of all 450 sentences together per second (default 100; the rate wobbles between 64 and this)")
+    ap.add_argument("--echo", action="store_true", help="payload profile: the receiver echoes everything back (default for the payload: no echo, one way)")
     ap.add_argument("--steady", action="store_true", help="payload profile: send every stream constantly at its maximum instead of varying it")
     ap.add_argument("--minutes", type=float, help="run length in minutes")
     ap.add_argument("--seconds", type=float, help="run length in seconds (instead of --minutes)")
@@ -79,6 +80,7 @@ def main():
                 g["hz"] = PAYLOAD["vdr_hz"]                      # VDR: 3 sentences per 5 s
         sc.update({"name": "payload", "profile": "payload", "mix_hz": round(a.sentences / per_round, 4), "streams": [dict(x) for x in PAYLOAD["streams"]]})
         sc.pop("marking", None)
+        sc["echo"] = bool(a.echo)
         if not a.steady:       # the payload numbers are MAXIMUMS: every component varies below them (new random level every step_s seconds)
             sc["vary"] = {"streams": 0.25, "radar": 0.25, "mix": round(min(64 / a.sentences, 1.0), 3), "step_s": 2.0}
     mins = f"{secs / 60:g}min"
@@ -96,8 +98,11 @@ def main():
     try:
         s = json.load(open(os.path.join(run_dir, "stats_A.json")))
         sent = sum(v["msgs"] for v in s["tx"].values()); got = sum(v["msgs"] for v in s["rx"].values()); gap = sum(v["lost"] for v in s["rx"].values())
-        print(f"\n[sender] SENDER VIEW: sent {sent} messages, {got} echoes came back, {sent - got} not echoed (round trip), {gap} sequence gaps on the way back, "
-              f"{s['filler']['tx_pkts']} ONF packets sent / {s['filler']['rx_pkts']} received. Full summary is built on the receiver PC.", flush=True)
+        if sc.get("echo") is False:
+            print(f"\n[sender] SENDER VIEW: sent {sent} messages and {s['filler']['tx_pkts']} stream packets (one way, no echo). The receiver PC builds the summary.", flush=True)
+        else:
+            print(f"\n[sender] SENDER VIEW: sent {sent} messages, {got} echoes came back, {sent - got} not echoed (round trip), {gap} sequence gaps on the way back, "
+                  f"{s['filler']['tx_pkts']} ONF packets sent / {s['filler']['rx_pkts']} received. Full summary is built on the receiver PC.", flush=True)
     except (OSError, ValueError, KeyError):
         pass
     if os.environ.get("SUDO_UID"):     # run as root inside the namespace: hand the files back to you

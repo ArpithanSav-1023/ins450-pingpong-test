@@ -213,6 +213,7 @@ class Endpoint:
             if not a.local:
                 c.check_group(g["addr"])
         self.lock = threading.Lock()
+        self.echo = bool(sc.get("echo", True))     # False: one-way test, the receiver only receives and counts (sends nothing back)
         self.vary = sc.get("vary") or {}       # {"streams": 0.25, "radar": 0.25, "mix": 0.64, "step_s": 2}: lowest fraction of the maximum rate per component
         self.rad = sc.get("radar")        # optional official radar stream: {"addr","port","cos","hz","bytes"}; counted as one more group "RADAR"
         if self.rad and not a.local:
@@ -394,7 +395,7 @@ class Endpoint:
             self.feed.write("BAD", "RADAR", where, info, data[:40], "UNEXPECTED SIZE: ")
         if self.feed.due("RX", "RADAR"):
             self.feed.write("RX", "RADAR", where, info, data[:40])
-        if self.role == "B":                        # pong: echo the datagram back verbatim on the same group
+        if self.role == "B" and self.echo:           # pong: echo the datagram back verbatim on the same group
             self.radar_send(data)
 
     def on_mix(self, group, data, anc, src):
@@ -425,7 +426,7 @@ class Endpoint:
             self.feed.write("DSCP", group, f"{g['addr']}:{g['port']}", f"{info} got_tos={tos:#04x} want=CS{g['cos']}", data)
         if self.feed.due("RX", group):
             self.feed.write("RX", group, f"{g['addr']}:{g['port']}", info, data)
-        if self.role == "B":                        # the "pong": answer every datagram with one of our own on the same group
+        if self.role == "B" and self.echo:          # the "pong": answer every datagram with one of our own on the same group
             self.send_mix(group, self.next_payload(group))
 
     def fill_sender(self, stopper, t_end, pool, t_start, st):
@@ -558,8 +559,9 @@ class Endpoint:
                 ts.append(threading.Thread(target=self.radar_sender, daemon=True, args=(stopper, t_send_end, t_send_start)))
         # filler runs in separate processes: Python threads share one GIL and cannot do 200 Mbit/s of packets plus the mix
         for st in self.streams:
-            ts += [self.ctx.Process(target=self.fill_receiver, daemon=True, args=(stopper, st)),
-                   self.ctx.Process(target=self.fill_sender, daemon=True, args=(stopper, t_send_end, pool, t_send_start, st))]
+            ts.append(self.ctx.Process(target=self.fill_receiver, daemon=True, args=(stopper, st)))
+            if self.echo or self.role == "A":          # without echo only the sender sends the streams
+                ts.append(self.ctx.Process(target=self.fill_sender, daemon=True, args=(stopper, t_send_end, pool, t_send_start, st)))
         for t in ts:
             t.start()
         while not stopper.stopped():
