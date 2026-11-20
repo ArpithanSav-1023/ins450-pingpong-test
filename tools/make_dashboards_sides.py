@@ -73,6 +73,32 @@ def build(role, title, uid, port, intro, labels):
     for p_ in panels:                                     # the throughput panel got its own full-width row at y=11: push everything below it down
         if p_["gridPos"]["y"] >= 11 and "throughput" not in p_.get("title", ""):
             p_["gridPos"]["y"] += 7
+    if role == "A":       # "Echo packet loss": everything the receiver sent back (echo of the mix, radar, ONF dump) that never arrived here
+        y0 = next(p_["gridPos"]["y"] for p_ in panels if p_.get("title", "").startswith("Per multicast group"))
+        for p_ in panels:
+            if p_["gridPos"]["y"] >= y0:
+                p_["gridPos"]["y"] += 11
+        lost = f'sum(pp_side_packets_lost{{{R}}})'
+        got = f'sum(pp_side_packets_received{{{R}}})'
+        panels += [
+            row("Echo packet loss (packets the receiver sent back that never reached this PC)", y0),
+            stat("Echo packets lost (mix + radar + ONF)", lost, pos(0, y0 + 1, 6, 3), thresholds=LOSS_T, decimals=0),
+            stat("Echo packet loss %", f'100 * {lost} / clamp_min({lost} + {got}, 1)', pos(6, y0 + 1, 6, 3), unit="percent", thresholds=[(0, GREEN), (0.0001, RED)], decimals=4),
+            stat("Radar echoes lost", f'sum(pp_side_msgs_lost{{{R},group="RADAR"}}) or vector(0)', pos(12, y0 + 1, 6, 3), thresholds=LOSS_T, decimals=0),
+            stat("Mix echoes not back (sent - echoed)", f'sum(pp_side_messages_sent{{{R}}}) - sum(pp_side_messages_received{{{R}}})', pos(18, y0 + 1, 6, 3), thresholds=LOSS_T, decimals=0),
+            timeseries("Echo packet loss % over time", "Share of the echo packets that went missing, per 30 s window.",
+                       [target(f'100 * clamp_min(increase(pp_side_packets_lost{{{R}}}[30s]), 0) / clamp_min(increase(pp_side_packets_lost{{{R}}}[30s]) + increase(pp_side_packets_received{{{R}}}[30s]), 1)', "echo packet loss %")],
+                       pos(0, y0 + 4, 12, 7), unit="percent", thresholds=[(0.0001, RED)]),
+            timeseries("Echo packets lost per second", "Missing echo packets per second: all, ONF dump only, and mix messages (radar included).",
+                       [target(f'clamp_min(deriv(pp_side_packets_lost{{{R}}}[10s]), 0)', "all echo packets", "A"), target(f'clamp_min(deriv(pp_side_filler_pkts_lost{{{R}}}[10s]), 0)', "ONF dump", "B"),
+                        target(f'sum(clamp_min(deriv(pp_side_msgs_lost{{{R},group="RADAR"}}[10s]), 0))', "radar", "C"), target(f'sum(clamp_min(deriv(pp_side_messages_lost{{{R}}}[10s]), 0))', "mix + radar messages", "D")],
+                       pos(12, y0 + 4, 12, 7), unit="pps"),
+        ]
+    if role == "A":       # selection list (tools/selector.py on :9104): which sentences / groups / radar the sender sends; changes apply to a running test
+        yb = max(p_["gridPos"]["y"] + p_["gridPos"]["h"] for p_ in panels)      # at the bottom of the dashboard
+        panels.append(row("Choose what the sender sends (tick = sent, applies within about a second)", yb))
+        panels.append({"id": m.nxt(), "type": "text", "title": "Sender selection", "gridPos": pos(0, yb + 1, 24, 16),
+                       "options": {"mode": "html", "content": '<iframe src="http://localhost:9104/" style="width:100%;height:100%;border:0"></iframe>'}})
     return {"uid": uid, "title": title, "tags": ["450", "cbs350", role == "A" and "sender" or "receiver"], "schemaVersion": 39, "version": 1,
             "editable": True, "refresh": "5s", "time": {"from": "now-15m", "to": "now"}, "timezone": "browser", "graphTooltip": 1,
             "annotations": {"list": [{"datasource": m.DS, "enable": True, "name": "This side running", "iconColor": "rgba(130,130,130,0.35)", "expr": f'pp_side_active{{{R}}} == 1',

@@ -1616,7 +1616,7 @@
    "collapsed": false,
    "gridPos": {
     "x": 0,
-    "y": 40,
+    "y": 51,
     "w": 24,
     "h": 1
    },
@@ -1632,7 +1632,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 41,
+    "y": 52,
     "w": 24,
     "h": 12
    },
@@ -1717,7 +1717,7 @@
    "collapsed": false,
    "gridPos": {
     "x": 0,
-    "y": 53,
+    "y": 64,
     "w": 24,
     "h": 1
    },
@@ -1734,7 +1734,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 54,
+    "y": 65,
     "w": 24,
     "h": 11
    },
@@ -1772,7 +1772,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 65,
+    "y": 76,
     "w": 24,
     "h": 5
    },
@@ -1797,6 +1797,473 @@
     "enableLogDetails": false,
     "dedupStrategy": "none",
     "sortOrder": "Descending"
+   }
+  },
+  {
+   "id": 30,
+   "type": "row",
+   "title": "Echo packet loss (packets the receiver sent back that never reached this PC)",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 40,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 31,
+   "type": "stat",
+   "title": "Echo packets lost (mix + radar + ONF)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 41,
+    "w": 6,
+    "h": 3
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "sum(pp_side_packets_lost{role=\"A\"})",
+     "legendFormat": "",
+     "refId": "A",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "color": {
+      "mode": "thresholds"
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#37b24d",
+        "value": null
+       },
+       {
+        "color": "#f2a900",
+        "value": 0.0001
+       },
+       {
+        "color": "#e03131",
+        "value": 1
+       }
+      ]
+     },
+     "decimals": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "auto",
+    "justifyMode": "center"
+   }
+  },
+  {
+   "id": 32,
+   "type": "stat",
+   "title": "Echo packet loss %",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 6,
+    "y": 41,
+    "w": 6,
+    "h": 3
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "100 * sum(pp_side_packets_lost{role=\"A\"}) / clamp_min(sum(pp_side_packets_lost{role=\"A\"}) + sum(pp_side_packets_received{role=\"A\"}), 1)",
+     "legendFormat": "",
+     "refId": "A",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "color": {
+      "mode": "thresholds"
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#37b24d",
+        "value": null
+       },
+       {
+        "color": "#e03131",
+        "value": 0.0001
+       }
+      ]
+     },
+     "decimals": 4
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "auto",
+    "justifyMode": "center"
+   }
+  },
+  {
+   "id": 33,
+   "type": "stat",
+   "title": "Radar echoes lost",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 41,
+    "w": 6,
+    "h": 3
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "sum(pp_side_msgs_lost{role=\"A\",group=\"RADAR\"}) or vector(0)",
+     "legendFormat": "",
+     "refId": "A",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "color": {
+      "mode": "thresholds"
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#37b24d",
+        "value": null
+       },
+       {
+        "color": "#f2a900",
+        "value": 0.0001
+       },
+       {
+        "color": "#e03131",
+        "value": 1
+       }
+      ]
+     },
+     "decimals": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "auto",
+    "justifyMode": "center"
+   }
+  },
+  {
+   "id": 34,
+   "type": "stat",
+   "title": "Mix echoes not back (sent - echoed)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 18,
+    "y": 41,
+    "w": 6,
+    "h": 3
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "sum(pp_side_messages_sent{role=\"A\"}) - sum(pp_side_messages_received{role=\"A\"})",
+     "legendFormat": "",
+     "refId": "A",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "color": {
+      "mode": "thresholds"
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#37b24d",
+        "value": null
+       },
+       {
+        "color": "#f2a900",
+        "value": 0.0001
+       },
+       {
+        "color": "#e03131",
+        "value": 1
+       }
+      ]
+     },
+     "decimals": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "auto",
+    "justifyMode": "center"
+   }
+  },
+  {
+   "id": 35,
+   "type": "timeseries",
+   "title": "Echo packet loss % over time",
+   "description": "Share of the echo packets that went missing, per 30 s window.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 44,
+    "w": 12,
+    "h": 7
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "100 * clamp_min(increase(pp_side_packets_lost{role=\"A\"}[30s]), 0) / clamp_min(increase(pp_side_packets_lost{role=\"A\"}[30s]) + increase(pp_side_packets_received{role=\"A\"}[30s]), 1)",
+     "legendFormat": "echo packet loss %",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "unit": "percent",
+     "min": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "showPoints": "never",
+      "spanNulls": false,
+      "thresholdsStyle": {
+       "mode": "line"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "transparent",
+        "value": null
+       },
+       {
+        "color": "#e03131",
+        "value": 0.0001
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "id": 36,
+   "type": "timeseries",
+   "title": "Echo packets lost per second",
+   "description": "Missing echo packets per second: all, ONF dump only, and mix messages (radar included).",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prom"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 44,
+    "w": 12,
+    "h": 7
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "clamp_min(deriv(pp_side_packets_lost{role=\"A\"}[10s]), 0)",
+     "legendFormat": "all echo packets",
+     "refId": "A"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "clamp_min(deriv(pp_side_filler_pkts_lost{role=\"A\"}[10s]), 0)",
+     "legendFormat": "ONF dump",
+     "refId": "B"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "sum(clamp_min(deriv(pp_side_msgs_lost{role=\"A\",group=\"RADAR\"}[10s]), 0))",
+     "legendFormat": "radar",
+     "refId": "C"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prom"
+     },
+     "expr": "sum(clamp_min(deriv(pp_side_messages_lost{role=\"A\"}[10s]), 0))",
+     "legendFormat": "mix + radar messages",
+     "refId": "D"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "unit": "pps",
+     "min": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "showPoints": "never",
+      "spanNulls": false,
+      "thresholdsStyle": {
+       "mode": "off"
+      }
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "id": 37,
+   "type": "row",
+   "title": "Choose what the sender sends (tick = sent, applies within about a second)",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 81,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 38,
+   "type": "text",
+   "title": "Sender selection",
+   "gridPos": {
+    "x": 0,
+    "y": 82,
+    "w": 24,
+    "h": 16
+   },
+   "options": {
+    "mode": "html",
+    "content": "<iframe src=\"http://localhost:9104/\" style=\"width:100%;height:100%;border:0\"></iframe>"
    }
   }
  ],

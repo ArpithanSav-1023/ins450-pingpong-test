@@ -60,6 +60,23 @@ def fill_onf(ws, f_tx, f_rx):
     ws.cell(r, 12).value, ws.cell(r, 13).value, ws.cell(r, 14).value, ws.cell(r, 15).value = f_rx["rx_pkts"], 0, f_rx["rx_lost"], 0
 
 
+def fill_radar(ws, tx, rx, rad):
+    """Extra row below the template table for the official radar stream (counted in datagrams of 17160 B)."""
+    if "RADAR" not in tx or not rad:
+        return
+    r, src = ws.max_row + 1, ws.max_row
+    for col in range(1, 18):
+        cell, o = ws.cell(r, col), ws.cell(src, col)
+        cell.value = o.value.replace(str(src), str(r)) if isinstance(o.value, str) and o.value.startswith("=") else o.value
+        cell._style = o._style
+    for col, v in enumerate(["RADAR", rad["addr"], rad["port"], "official radar", "binary (HALO20 spokes)", "8-byte header + 32 spokes", "Yes", None], 1):
+        ws.cell(r, col).value = v
+    ws.cell(r, 9).value = tx["RADAR"]["msgs"]
+    ws.cell(r, 10).value = "Official radar stream replayed from a capture: 17160 B datagrams (IP-fragmented), counter = spoke sequence"
+    x = rx["RADAR"]
+    ws.cell(r, 12).value, ws.cell(r, 13).value, ws.cell(r, 14).value, ws.cell(r, 15).value = x["msgs"], x["bad"], x["lost"], x["wrong_dscp"]
+
+
 def fill_sheet(ws, tx, rx, rate_hz, per_round_check=True):
     """tx: {group: {msgs, bytes}} of the sender; rx: {group: {msgs, lost, bad, wrong_dscp}} of the receiver."""
     rows = {ws.cell(r, 1).value: r for r in range(13, 56)}
@@ -143,6 +160,8 @@ def build(run_dir):
     ws2 = sheet_for(wb, f"Echo {pb} to {pa}", ws1)
     fill_sheet(ws1, A["tx"], B["rx"], hz)
     fill_sheet(ws2, B["tx"], A["rx"], hz)
+    fill_radar(ws1, A["tx"], B["rx"], scn.get("radar"))
+    fill_radar(ws2, B["tx"], A["rx"], scn.get("radar"))
     fill_onf(ws1, A["filler"], B["filler"])
     fill_onf(ws2, B["filler"], A["filler"])
     ws1["A4"], ws2["A4"] = f"{pa} sends -> {pb} receives", f"{pb} echoes -> {pa} receives (reply path)"

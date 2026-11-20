@@ -26,3 +26,24 @@ Stop early: Ctrl-C on the sender (the receiver stops with it), or `scripts/estop
 
 ## Limits
 The sender refuses a load that does not fit its link (100 Mbit/s NIC: about 97 Mbit/s). Maximum run length 60 minutes (`MAX_DURATION_S`).
+
+## Official radar stream (HALO20 spokes)
+
+The sender also replays the official radar stream from a real capture (`/home/sav1023/Code/test/radar_dump.pcapng`) on its own multicast group **239.6.7.8:6678** (captured on 236.6.7.8; moved into 239/8 because the lab only allows that range). Marked CS2. It is about **5.2 Mbit/s (0.65 MB/s)** per direction, counted inside the target rate (the ONF dump gets the rest). The receiver echoes every radar datagram back unchanged, like the other groups.
+
+- Datagrams are 17160 B, so each one travels as ~12 IP fragments. A lost fragment loses the whole datagram.
+- Counted as group `RADAR` in the dashboards, `summary_groups.csv` and an extra last row of the Excel sheet. The in-band counter is the spoke sequence number inside the data.
+- One-time setup on the **sender** PC only (the receiver does not need the capture; it never goes into git):
+  `.venv/bin/python tools/extract_radar.py /home/sav1023/Code/test/radar_dump.pcapng`  (makes `data/radar_bundles.bin`, 35 MB, 56 s that loops).
+  If the sender role moves to the other PC, copy it: `rsync data/radar_bundles.bin <user>@<other pc>:<repo>/data/`.
+- Leave it out with `python3 -m traffic.sender_cli --rate 50 --minutes 10 --no-radar`.
+- Both PCs need the updated `traffic/pp.py` (the receiver must echo radar).
+
+## Choosing what the sender sends (selection list in Grafana)
+
+The SENDER dashboard has a block **"Choose what the sender sends"** at the bottom: every sensor and sentence type of the mix (e.g. `NAVD  SI9001  GPGGA`) grouped by multicast group, plus the radar stream. Untick what you do not want; tick a group header to switch the whole group. Search box filters the list.
+
+- A change reaches a **running** test within about a second and is remembered for later runs (`data/selection.json`). `sender.sh` prints a NOTE at the start if anything is switched off.
+- Left-out sentences are not counted as lost (the sequence counters are only stamped on what is really sent).
+- The list is a small page served by `tools/selector.py` on `localhost:9104` (started by `scripts/start_stack.sh`) and embedded in Grafana, so the browser must be on the sender PC. Grafana needs `GF_PANELS_DISABLE_SANITIZE_HTML=true` for that (already set in `docker-compose.yml`).
+- The load drops by what you switch off; the ONF dump does not compensate.

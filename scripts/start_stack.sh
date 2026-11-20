@@ -8,6 +8,8 @@ if up 9101; then echo "poller already running (:9101)"; else
   nohup .venv/bin/python monitor/poller.py --interval 5 --db data/exp_a.sqlite >> data/poller.log 2>&1 & echo "poller started"; fi
 if up 9103; then echo "pingpong exporter already running (:9103)"; else
   nohup .venv/bin/python monitor/pp_exporter.py >> data/pp_exporter.log 2>&1 & echo "pingpong exporter started"; fi
+if up 9104; then echo "selection list already running (:9104)"; else
+  nohup .venv/bin/python tools/selector.py >> data/selector.log 2>&1 & echo "selection list started (:9104)"; fi
 [ -f data/phase.txt ] || echo "unlabeled" > data/phase.txt
 docker compose up -d
 echo; echo "Grafana:    http://localhost:3000   (dashboard opens by default)"

@@ -29,6 +29,7 @@ def main():
     ap.add_argument("--minutes", type=float, help="run length in minutes")
     ap.add_argument("--seconds", type=float, help="run length in seconds (instead of --minutes)")
     ap.add_argument("--base", default=os.path.join(ROOT, "scenarios", "pp9_025mbps.json"))
+    ap.add_argument("--no-radar", action="store_true", help="leave the official radar stream out of the mix")
     a = ap.parse_args()
     secs = a.seconds if a.seconds else (a.minutes or 10) * 60
     if secs > c.MAX_DURATION_S:
@@ -40,6 +41,13 @@ def main():
         sys.exit(f"{c.rate(a.rate)} does not fit through {nic} ({c.rate(speed)} link, about {c.rate(round(0.97 * speed))} possible). Lower the rate.")
     sc = json.load(open(a.base))
     tag = f"{a.rate:g}".replace(".", "p")
+    if not a.no_radar:      # official HALO20 radar stream, replayed on its own multicast group (see tools/extract_radar.py)
+        from . import pp
+        if not os.path.exists(pp.RADAR_FILE):
+            sys.exit(f"radar slice {pp.RADAR_FILE} not found. Build it once: .venv/bin/python tools/extract_radar.py /home/sav1023/Code/test/radar_dump.pcapng   (or use --no-radar)")
+        _, hz = pp.load_radar()
+        sc["radar"] = {"addr": "239.6.7.8", "port": 6678, "cos": 2, "bytes": 17160, "hz": round(hz, 3),
+                       "_note": "official HALO20 radar spoke stream (captured on 236.6.7.8:6678, moved into 239/8), 17160-byte datagrams, IP-fragmented"}
     mine = os.environ.get("PP_PORT", "GE9")                 # the switch port THIS (sending) PC is on
     other = "GE1" if mine == "GE9" else "GE9"
     sc.update({"name": f"pp9_{int(a.rate):03d}mbps" if a.rate == int(a.rate) else f"pp9_{tag}mbps", "target_mbps": a.rate, "duration_s": secs,
@@ -50,6 +58,10 @@ def main():
     os.makedirs(run_dir)
     json.dump(sc, open(os.path.join(run_dir, "scenario.json"), "w"), indent=1)
     print(f"[sender] {c.rate(a.rate)} for {mins} -> runs/{run}", flush=True)
+    from . import selection
+    sel = selection.Selector(); sel.refresh()
+    if sel.disabled:
+        print(f"[sender] NOTE: {len(sel.disabled)} item(s) are switched off in the dashboard selection list ({', '.join(sorted(sel.disabled))[:150]}). Tick them again in the dashboard to send everything.", flush=True)
     rc = subprocess.run([sys.executable, "-m", "traffic.pp", "--scenario", os.path.join(run_dir, "scenario.json"), "--role", "A", "--run-dir", run_dir,
                          "--duration", str(secs), "--start-in", "8", "--announce"], cwd=ROOT, env={**os.environ, "PYTHONPATH": ROOT}).returncode
     try:

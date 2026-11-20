@@ -12,6 +12,8 @@ Every datagram carries an in-band counter so loss is exact, not estimated:
   binary (NkPgN/RaUdP/RrUdP)  header block-id field = running counter per group
   syslog                 RFC 5424 PROCID field = running counter
   filler                 8-byte sequence number
+  radar (optional)       the official HALO20 spoke stream replayed verbatim (17160-byte datagrams, IP-fragmented, from data/radar_bundles.bin, see
+                         tools/extract_radar.py); counter = first spoke's sequence number at payload offset 10 (u16 LE, +32 per datagram, wraps at 4096)
 Definitions used in the metrics:
   message = one 450 sample (sentence / binary block / syslog line) from the mix
   packet  = any UDP datagram (mix + filler)         data = payload bytes of those
@@ -32,6 +34,7 @@ import time
 import zlib
 
 from . import common as c
+from . import selection
 from . import sender450 as s450
 
 FILL_PORT = 20100            # CCRS JSON port from the sheet: the ONF dump (no 450 header) is the load filler
@@ -42,6 +45,30 @@ MAX_SENTENCES_PER_SENSOR = 13   # one sensor (talker/SFI) may send at most 13 se
 BINARY_TOKENS = (b"NkPgN", b"RaUdP", b"RrUdP")
 NM_TAG = re.compile(rb"^UdPbC\x00\\([^*\\]*)\*([0-9A-Fa-f]{2})\\(.*)$", re.S)
 SYSLOG_N = re.compile(rb"450-(\S+) (\d+) 103 ")
+RADAR_FILE = os.path.join(c.PROJECT_ROOT, "data", "radar_bundles.bin")
+
+
+def radar_wire_bytes(n):
+    """Wire bytes of one radar datagram with n payload bytes: UDP 8, IP header 20 and Eth+FCS 18 on every fragment (1480 B of IP payload each)."""
+    return n + 8 + -(-(n + 8) // 1480) * 38
+
+
+def load_radar(path=RADAR_FILE):
+    """-> (datagrams, datagrams per second) from the slice written by tools/extract_radar.py."""
+    try:
+        with open(path, "rb") as f:
+            if f.read(4) != b"RADR":
+                raise ValueError("bad magic")
+            n, hz = struct.unpack("<Id", f.read(12))
+            out = [f.read(struct.unpack("<I", f.read(4))[0]) for _ in range(n)]
+    except (OSError, ValueError, struct.error) as ex:
+        raise SystemExit(f"radar stream requested but {path} is missing/unreadable ({ex}). Build it: .venv/bin/python tools/extract_radar.py <radar_dump.pcapng>")
+    return out, hz
+
+
+def radar_seq(p):
+    """in-band counter of a radar datagram: first spoke sequence / 32 (wraps at 128 datagrams = one antenna revolution)."""
+    return (struct.unpack_from("<H", p, 10)[0] // 32) % 128 if len(p) >= 12 else None
 
 
 def xor(b):
@@ -168,12 +195,18 @@ class Endpoint:
             if not a.local:
                 c.check_group(g["addr"])
         self.lock = threading.Lock()
-        self.tx = {g: {"msgs": 0, "bytes": 0} for g in self.groups}
-        self.rx = {g: {"msgs": 0, "bytes": 0, "lost": 0, "bad": 0, "wrong_dscp": 0, "foreign": 0} for g in self.groups}
+        self.rad = sc.get("radar")        # optional official radar stream: {"addr","port","cos","hz","bytes"}; counted as one more group "RADAR"
+        if self.rad and not a.local:
+            c.check_group(self.rad["addr"])
+        names = list(self.groups) + (["RADAR"] if self.rad else [])
+        self.tx = {g: {"msgs": 0, "bytes": 0} for g in names}
+        self.rx = {g: {"msgs": 0, "bytes": 0, "lost": 0, "bad": 0, "wrong_dscp": 0, "foreign": 0} for g in names}
         self.gaps = {}
         self.builder = s450.Builder(False)
         self.stamper = Stamper()
         self.echo_q = {g: [] for g in self.groups}
+        self.raw_q = {g: [] for g in self.groups}      # role A: unstamped payloads, filtered by the dashboard selection and stamped only when sent
+        self.sel = selection.Selector()
         self.socks = {}
         self.t_start = time.time()
         self.feed = Feed(os.path.join(a.run_dir, f"feed_{a.role}.log"), a.role)
@@ -215,15 +248,28 @@ class Endpoint:
             q.extend(self.stamper.stamp(group, p) for p in s450.payloads(group, self.builder))
         return q.pop(0)
 
+    def next_raw(self, group):
+        q = self.raw_q[group]
+        if not q:
+            q.extend(s450.payloads(group, self.builder))
+        return q.pop(0)
+
+    def reload_selection(self):
+        if self.sel.refresh():
+            print(f"[{self.role}] selection changed: {len(self.sel.disabled)} item(s) switched off" + (f" ({', '.join(sorted(self.sel.disabled))[:200]})" if self.sel.disabled else ""), flush=True)
+
     # ---- threads
     def mix_sender(self, stopper, t_end, t_start):
         hz = float(self.sc.get("mix_hz", 10))
         stopper.sleep_until(t_start)
         nxt = time.monotonic()
         while time.monotonic() < t_end and not stopper.stopped():
+            self.reload_selection()
             for name in self.groups:
                 for _ in range(int(self.groups[name].get("per_round", 1))):
-                    self.send_mix(name, self.next_payload(name))
+                    p = self.next_raw(name)            # take it from the cycle even when switched off, so the others keep their rate
+                    if self.sel.enabled(selection.key(name, p)):
+                        self.send_mix(name, self.stamper.stamp(name, p))
             nxt += 1.0 / hz
             time.sleep(max(0.0, nxt - time.monotonic()))
 
@@ -242,15 +288,82 @@ class Endpoint:
                 s.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, socket.inet_aton(g["addr"]) + socket.inet_aton(self.my_ip))
             s.setblocking(False)
             sel.register(s, selectors.EVENT_READ, name)
+        if self.rad:
+            r = self.rad
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1 << 23)
+            s.setsockopt(socket.IPPROTO_IP, socket.IP_RECVTOS, 1)
+            if self.a.local:
+                s.bind((self.my_ip, r["port"]))
+            else:
+                s.bind((r["addr"], r["port"]))
+                s.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, socket.inet_aton(r["addr"]) + socket.inet_aton(self.my_ip))
+            s.setblocking(False)
+            sel.register(s, selectors.EVENT_READ, "RADAR")
         while not stopper.stopped():
             for key, _ in sel.select(0.2):
                 name, s = key.data, key.fileobj
                 for _ in range(64):
                     try:
-                        data, anc, _, addr = s.recvmsg(4096, 64)
+                        data, anc, _, addr = s.recvmsg(65535, 64)
                     except BlockingIOError:
                         break
-                    self.on_mix(name, data, anc, addr[0])
+                    (self.on_radar if name == "RADAR" else self.on_mix)(*((data, anc, addr[0]) if name == "RADAR" else (name, data, anc, addr[0])))
+
+    # ---- official radar stream (optional)
+    def radar_send(self, payload):
+        r = self.rad
+        dest = (self.peer_ip if self.a.local else r["addr"], r["port"])
+        self.tx_sock(r["cos"]).sendto(payload, dest)
+        with self.lock:
+            self.tx["RADAR"]["msgs"] += 1
+            self.tx["RADAR"]["bytes"] += len(payload)
+
+    def radar_sender(self, stopper, t_end, t_start):
+        pk, _ = load_radar()
+        hz = float(self.rad.get("hz") or 36.0)
+        stopper.sleep_until(t_start)
+        nxt, i = time.monotonic(), 0
+        while time.monotonic() < t_end and not stopper.stopped():
+            if not self.sel.enabled(selection.RADAR_KEY):     # switched off on the dashboard: pause (the counter carries on where it stopped)
+                nxt = time.monotonic() + 1.0 / hz
+                time.sleep(1.0 / hz)
+                continue
+            p = pk[i % len(pk)]
+            self.radar_send(p)
+            if self.feed.due("TX", "RADAR"):
+                self.feed.write("TX", "RADAR", f"{self.rad['addr']}:{self.rad['port']}", f"{self.path} CS{self.rad['cos']} n={radar_seq(p)} len={len(p)}", p[:40])
+            i += 1
+            nxt += 1.0 / hz
+            time.sleep(max(0.0, nxt - time.monotonic()))
+
+    def on_radar(self, data, anc, src):
+        r, cfg = self.rx["RADAR"], self.rad
+        if src != self.peer_ip:
+            with self.lock:
+                r["foreign"] += 1
+            return
+        tos = next((struct.unpack("B", d[:1])[0] for lvl, t, d in anc if lvl == socket.IPPROTO_IP and t == socket.IP_TOS), None)
+        seq, ok = radar_seq(data), len(data) == cfg.get("bytes", 17160)
+        wrong = tos is not None and tos >> 5 != cfg["cos"]
+        with self.lock:
+            r["msgs"] += 1
+            r["bytes"] += len(data)
+            r["bad"] += 0 if ok else 1
+            r["wrong_dscp"] += 1 if wrong else 0
+            missed = self.gaps.setdefault(("RADAR", "radar"), Gap()).feed(seq, 128)
+            r["lost"] += missed
+        info = f"{'GE9>GE1' if self.role == 'A' else 'GE1>GE9'} CS{cfg['cos']} n={seq} len={len(data)}"
+        where = f"{cfg['addr']}:{cfg['port']}"
+        if missed:
+            self.feed.write("LOSS", "RADAR", where, info, data[:40], f"MISSING {missed} before this one: ")
+        if not ok:
+            self.feed.write("BAD", "RADAR", where, info, data[:40], "UNEXPECTED SIZE: ")
+        if self.feed.due("RX", "RADAR"):
+            self.feed.write("RX", "RADAR", where, info, data[:40])
+        if self.role == "B":                        # pong: echo the datagram back verbatim on the same group
+            self.radar_send(data)
 
     def on_mix(self, group, data, anc, src):
         r = self.rx[group]
@@ -377,13 +490,21 @@ class Endpoint:
         if worst[1] * float(sc.get("mix_hz", 10)) > MAX_SENTENCES_PER_SENSOR + 1e-9:
             raise SystemExit(f"REFUSING: sensor {worst[0][2:]} would send {worst[1] * float(sc.get('mix_hz', 10)):.0f} sentences/s (limit {MAX_SENTENCES_PER_SENSOR}); lower mix_hz")
         per = sum(sizes) * 8 * float(sc.get("mix_hz", 10)) / 1e6
+        rad_mbps = 0.0
+        if self.rad:       # same on both sides (computed from the scenario) so each side's ONF dump gets the same remainder
+            rad_mbps = radar_wire_bytes(self.rad.get("bytes", 17160)) * 8 * float(self.rad["hz"]) / 1e6
+            per += rad_mbps
+            if per > float(sc.get("target_mbps", 0)):
+                raise SystemExit(f"REFUSING: mix + radar already need {c.rate(round(per, 2))}, above the target {c.rate(float(sc.get('target_mbps', 0)))}. Raise the rate.")
         self.mix_mbps = per
         self.fill_mbps = max(0.0, float(sc.get("target_mbps", 0)) - per)
         pool = load_pool(self.a.charts_dir)
-        print(f"[{self.role}] {self.my_ip} -> {self.peer_ip}  {sc['name']}: mix {c.rate(round(per, 2))} + ONF dump {c.rate(round(self.fill_mbps, 1))} = target {c.rate(float(sc.get('target_mbps', 0)))}, {dur:.0f}s", flush=True)
+        print(f"[{self.role}] {self.my_ip} -> {self.peer_ip}  {sc['name']}: mix{' (incl. radar ' + c.rate(round(rad_mbps, 2)) + ')' if self.rad else ''} {c.rate(round(per, 2))} + ONF dump {c.rate(round(self.fill_mbps, 1))} = target {c.rate(float(sc.get('target_mbps', 0)))}, {dur:.0f}s", flush=True)
         ts = [threading.Thread(target=self.mix_receiver, daemon=True, args=(stopper,))]
         if self.role == "A":
             ts.append(threading.Thread(target=self.mix_sender, daemon=True, args=(stopper, t_send_end, t_send_start)))
+            if self.rad:
+                ts.append(threading.Thread(target=self.radar_sender, daemon=True, args=(stopper, t_send_end, t_send_start)))
         # filler runs in separate processes: Python threads share one GIL and cannot do 200 Mbit/s of packets plus the mix
         ts += [self.ctx.Process(target=self.fill_receiver, daemon=True, args=(stopper,)),
                self.ctx.Process(target=self.fill_sender, daemon=True, args=(stopper, t_send_end, pool, t_send_start))]
