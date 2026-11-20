@@ -16,6 +16,8 @@ sysctl --system >/dev/null
 nmcli -t -f NAME connection show | grep -qx pp-test || nmcli connection add type ethernet ifname "$NIC" con-name pp-test ipv4.method manual ipv4.addresses 192.168.50.1/24 ipv6.method disabled connection.autoconnect yes
 nmcli connection up pp-test || true
 sysctl -w "net.ipv4.conf.$NIC.rp_filter=0" >/dev/null || true
+# Ubuntu firewall (ufw) would drop the test traffic (UDP multicast + unicast) arriving on the test NIC: allow everything on that NIC only
+if command -v ufw >/dev/null && ufw status | grep -q "Status: active"; then ufw allow in on "$NIC" comment "ping-pong test NIC" >/dev/null && echo "ufw: allowed incoming traffic on $NIC"; fi
 sudo -u "$U" bash -c "cd '$ROOT' && python3 -m venv .venv && .venv/bin/pip install -q prometheus_client==0.26.0 openpyxl"
 [ -f "$ROOT/scripts/install_sudoless.sh" ] && "$ROOT/scripts/install_sudoless.sh" || true     # password-less nic_role.sh from now on
 echo; echo "Done. LOG OUT AND IN AGAIN (or run: newgrp docker) so docker works without sudo, then:  scripts/sender.sh 50 10"
